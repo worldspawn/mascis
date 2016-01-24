@@ -1,0 +1,5 @@
+src/packages
+obj
+bin
+.vs
+*ncrunch*

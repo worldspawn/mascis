@@ -7,12 +7,12 @@ namespace Mascis
     public class QueryParser
     {
         private readonly MascisSession _session;
-        private readonly BooleanExpressionParser _binaryParser;
+        private readonly ExpressionParser _binaryParser;
 
         public QueryParser(MascisSession session)
         {
             _session = session;
-            _binaryParser = new BooleanExpressionParser(_session);
+            _binaryParser = new ExpressionParser(_session);
         }
 
         public QueryTree.Select Parse(QueryTable queryTable)

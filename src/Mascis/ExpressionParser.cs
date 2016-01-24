@@ -6,11 +6,13 @@ using System.Reflection;
 
 namespace Mascis
 {
-    public class BooleanExpressionParser
+    public class ExpressionParser
     {
         private readonly MascisSession _session;
+        private readonly MethodInfo _stringContains = typeof(String).GetMethod("Contains", BindingFlags.Instance | BindingFlags.Public);
+        private readonly MethodInfo _mapValue = typeof(QueryMap).GetMethod("Value", BindingFlags.Instance | BindingFlags.Public);
 
-        public BooleanExpressionParser(MascisSession session)
+        public ExpressionParser(MascisSession session)
         {
             _session = session;
         }
@@ -27,10 +29,7 @@ namespace Mascis
 
         private QueryTree.Expression ParseMethodCallExpression(MethodCallExpression expression)
         {
-            var stringContains = typeof (String).GetMethod("Contains", BindingFlags.Instance | BindingFlags.Public);
-            var mapValue = typeof (QueryMap).GetMethod("Value", BindingFlags.Instance | BindingFlags.Public);
-
-            if (expression.Method == stringContains)
+            if (expression.Method == _stringContains)
             {
                 var searchFor = ParseExpression(expression.Arguments[0]);
                 var source = ParseExpression(expression.Object);
@@ -46,7 +45,7 @@ namespace Mascis
                 };
             }
 
-            if (expression.Method.IsGenericMethod && expression.Method.GetGenericMethodDefinition() == mapValue)
+            if (expression.Method.IsGenericMethod && expression.Method.GetGenericMethodDefinition() == _mapValue)
             {
                 var map = ParseExpression(expression.Object) as QueryTree.ConstantExpression;
                 var value = map.Value as QueryMap;
@@ -133,26 +132,16 @@ namespace Mascis
 
             var fex = expression.Expression as MemberExpression;
 
-            while (!fex.Type.IsGenericType || fex.Type.GetGenericTypeDefinition() != typeof(QueryTable<>))
+            while (!fex.Type.IsGenericType || fex.Type.GetGenericTypeDefinition() != typeof(QueryTable<>))//walking up the expression till we get to the querytable
             {
                 fex = fex.Expression as MemberExpression;
             }
 
-            var expressions = new List<MemberExpression>();
-            var cex = fex.Expression as ConstantExpression;
-            while (cex == null)
-            {
-                expressions.Add(fex);
-                fex = fex.Expression as MemberExpression;
-                cex = fex.Expression as ConstantExpression;
-            }
+            var objectMember = Expression.Convert(fex, typeof(object));
+            var getterLambda = Expression.Lambda<Func<object>>(objectMember);
+            var getter = getterLambda.Compile();
+            var queryTable = (QueryTable)getter();
 
-            var fld = fex.Member as FieldInfo;
-            var expressionWalker = fld.GetValue(cex.Value);
-            expressions.Reverse();
-            expressionWalker = expressions.Aggregate(expressionWalker, (current, ex1) => (ex1.Member as PropertyInfo).GetValue(current));
-
-            var queryTable = (QueryTable)expressionWalker;
             var ex = new QueryTree.ColumnExpression
             {
                 Table = queryTable,
@@ -170,11 +159,14 @@ namespace Mascis
                 expression = expression.Expression as MemberExpression;
                 if (expression == null)
                 {
-                    var value = ParseExpression(startedWith.Expression) as QueryTree.ConstantExpression;
-                    var propertyInfo = (PropertyInfo) startedWith.Member;
+                    var objectMember = Expression.Convert(startedWith, typeof(object));
+                    var getterLambda = Expression.Lambda<Func<object>>(objectMember);
+                    var getter = getterLambda.Compile();
+                    var value = getter();
+
                     return new QueryTree.ConstantExpression
                     {
-                        Value = propertyInfo.GetValue(value.Value)
+                        Value = value
                     };
                 }
             }
@@ -209,6 +201,14 @@ namespace Mascis
                     return QueryTree.BooleanOperator.Equal;
                 case ExpressionType.Add:
                     return QueryTree.BooleanOperator.Add;
+                case ExpressionType.GreaterThan:
+                    return QueryTree.BooleanOperator.GreaterThan;
+                case ExpressionType.GreaterThanOrEqual:
+                    return QueryTree.BooleanOperator.GreaterThanOrEqualTo;
+                case ExpressionType.LessThan:
+                    return QueryTree.BooleanOperator.LessThan;
+                case ExpressionType.LessThanOrEqual:
+                    return QueryTree.BooleanOperator.LessThanOrEqualTo;
                 default:
                     throw new UnknownNodeType();
             }

@@ -71,10 +71,14 @@ namespace Mascis
 
         public enum BooleanOperator
         {
+            Unknown,
             And,
             Or,
             Equal,
             GreaterThan,
+            GreaterThanOrEqualTo,
+            LessThan,
+            LessThanOrEqualTo,
             Add
         }
 

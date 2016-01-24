@@ -45,7 +45,7 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="BooleanExpressionParser.cs" />
+    <Compile Include="ExpressionParser.cs" />
     <Compile Include="Class1.cs" />
     <Compile Include="DefaultMappingConfiguration.cs" />
     <Compile Include="EntityChangeTracker.cs" />

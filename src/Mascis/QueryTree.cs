@@ -9,20 +9,20 @@ namespace Mascis
             public object Value { get; set; }
         }
 
-        public class Select : Expression
+        public class SelectExpression : Expression
         {
             public Expression From { get; set; }
             public IList<AliasedExpression> Values { get; set; } 
-            public IList<Join> Join { get; } = new List<Join>();
-            public IList<Where> Where { get; } = new List<Where>();
+            public IList<JoinExpression> Join { get; } = new List<JoinExpression>();
+            public IList<Expression> Where { get; } = new List<Expression>();
         }
 
-        public class From: Expression
+        public class FromExpression: Expression
         {
             public TableExpression Table { get; set; }
         }
 
-        public class Join: Expression
+        public class JoinExpression: Expression
         {
             public Expression Table { get; set; }
             public Expression On { get; set; }
@@ -30,13 +30,14 @@ namespace Mascis
 
         public class TableExpression: Expression
         {
-            public QueryTable Table { get; set; } 
+            public string Table { get; set; }
+            public string TableAlias { get; set; } 
         }
 
-        public class Where
-        {
-            public Expression Clause { get; set; }
-        }
+        //public class Where
+        //{
+        //    public Expression Clause { get; set; }
+        //}
 
         public class BinaryExpression : Expression
         {
@@ -47,8 +48,8 @@ namespace Mascis
 
         public class ColumnExpression : Expression
         {
-            public QueryTable Table { get; set; }
             public string Column { get; set; } 
+            public string TableAlias { get; set; }
         }
 
         public class FunctionExpression : Expression
@@ -57,10 +58,10 @@ namespace Mascis
             public Expression[] Arguments { get; set; }
         }
 
-        public class AliasReference : Expression
+        public class AliasReferenceExpression : Expression
         {
             public string Alias { get; set; }
-            public QueryTable Table { get; set; }
+            public string TableAlias { get; set; }
         }
 
         public class AliasedExpression : Expression

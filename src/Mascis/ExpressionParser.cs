@@ -50,10 +50,10 @@ namespace Mascis
                 var map = ParseExpression(expression.Object) as QueryTree.ConstantExpression;
                 var value = map.Value as QueryMap;
 
-                return new QueryTree.AliasReference
+                return new QueryTree.AliasReferenceExpression
                 {
                     Alias = value.Alias,
-                    Table = value.Table
+                    TableAlias = value.Table.Alias
                 };
             }
 
@@ -144,8 +144,8 @@ namespace Mascis
 
             var ex = new QueryTree.ColumnExpression
             {
-                Table = queryTable,
-                Column = propertyMap.ColumnName
+                Column = propertyMap.ColumnName,
+                TableAlias = queryTable.Alias
             };
 
             return ex;

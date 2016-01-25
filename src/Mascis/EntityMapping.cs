@@ -14,7 +14,7 @@ namespace Mascis
             var keyMaps = key.Keys.Select(x => new MapMapping(x)).ToArray();
             Maps = maps.Where(x=>!key.Keys.Contains(x)).Select(x => new MapMapping(x)).Union(keyMaps).ToArray();
             Key = key;
-            TableName = "[" + configuration.TableName + "]";
+            TableName = configuration.TableName;
             Type = configuration.Type;
 
             InterceptList =

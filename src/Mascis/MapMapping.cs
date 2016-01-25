@@ -6,7 +6,7 @@ namespace Mascis
     {
         public MapMapping(MapMappingConfiguration configuration)
         {
-            ColumnName = "[" + configuration.ColumnName + "]";
+            ColumnName = configuration.ColumnName;
             IsReadOnly = configuration.IsReadOnly;
             Property = configuration.Property;
         }

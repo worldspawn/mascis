@@ -41,11 +41,6 @@ namespace Mascis
             public string TableAlias { get; set; } 
         }
 
-        //public class Where
-        //{
-        //    public Expression Clause { get; set; }
-        //}
-
         public class BinaryExpression : Expression
         {
             public BooleanOperator Operator { get; set; }
@@ -88,10 +83,13 @@ namespace Mascis
             GreaterThanOrEqualTo,
             LessThan,
             LessThanOrEqualTo,
-            Add
+            Add,
+            Subtract,
+            Multiply,
+            Divide
         }
 
-        public class Expression
+        public abstract class Expression
         {
             
         }

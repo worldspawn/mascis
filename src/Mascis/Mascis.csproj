@@ -51,11 +51,8 @@
     <Compile Include="EntityChangeTracker.cs" />
     <Compile Include="EntityMapping.cs" />
     <Compile Include="EntityMappingConfiguration.cs" />
-    <Compile Include="Foo.cs" />
     <Compile Include="FooInterceptor.cs" />
-    <Compile Include="FooItem.cs" />
     <Compile Include="FooMappingConfiguration.cs" />
-    <Compile Include="FooProjection.cs" />
     <Compile Include="IMappingConfiguration.cs" />
     <Compile Include="KeyMapping.cs" />
     <Compile Include="KeyMappingConfiguration.cs" />

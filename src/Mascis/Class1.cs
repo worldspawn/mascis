@@ -85,7 +85,9 @@ namespace Mascis
 
             public string ParseExpression(QueryTree.JoinExpression expression)
             {
-                return $"JOIN ({_parser.ParseExpression(expression.Table)}) {_parser.ParseExpression(expression.Alias)} ON {_parser.ParseExpression(expression.On)} ";
+                bool includeAlias = expression.Table is QueryTree.SelectExpression;
+                var alias = includeAlias ? _parser.ParseExpression(expression.Alias) : null;
+                return $"JOIN {_parser.ParseExpression(expression.Table)} {alias} ON {_parser.ParseExpression(expression.On)} ";
             }
         }
 
@@ -160,10 +162,8 @@ namespace Mascis
             }
         }
 
-        public IDbCommand Process<TEntity>(Query<TEntity> query, MascisSession session)
+        public IDbCommand Process(ParsedQuery queryPlan, MascisSession session)
         {
-            var queryParser = new QueryParser(session);
-            var queryPlan = queryParser.Parse(query);
             var queryText =  ParseExpression(queryPlan.Expression);
 
             SqlCommand command = new SqlCommand(queryText);
@@ -341,48 +341,37 @@ namespace Mascis
     {
     }
 
+    public class Order
+    {
+        public virtual Guid Id { get; set; }
+        public virtual string Name { get; set; }
+    }
+
+    public class OrderItem
+    {
+        public virtual Guid Id { get; set; }
+        public virtual Guid OrderId { get; set; }
+        public virtual string Product { get; set; }
+        public virtual int Amount { get; set; }
+    }
+
     public class Class1
     {
         public Class1()
         {
-            var mapper = new Mapper(new [] {typeof(Foo)});
+            var mapper = new Mapper(new [] {typeof(Order), typeof(OrderItem)});
             mapper.MappingConfiguration = new FooMappingConfiguration();
             var mappings = mapper.Build();
-            var mascisFactory = new MascisFactory(mappings);
+            var connectionString = "data source=.;integrated security=sspi;initial catalog=mascis";
+            var mascisFactory = new MascisFactory(mappings, connectionString);
             var mascisSession = mascisFactory.Start();
-            var f = mascisSession.Create<Foo>();
+            
 
-            f.Test = "Zing";
+            var q = mascisSession.Query<Order>();
+            var q1 = q.CreateTable<OrderItem>();
+            q.FromTable.Join(q1, () => q.FromTable.Ex.Id == q1.Ex.OrderId);
 
-            var q = mascisSession.Query<Foo>();
-            var q1 = q.CreateTable<Foo>();
-            var m = q1.Map(() => q1.Ex.Test + "FFF");
-            q.FromTable.Join(q1, () => q.FromTable.Ex.Test == m.Value<string>());
-
-            var boom = new
-            {
-                Thing = new
-                {
-                    Foo = "Ferret"
-                }
-            };
-
-            //q.Map(() => q.FromTable.Ex.Test + " 666");
-
-            var x = "Zombie";
-            q.Where(() => q1.Ex.Test == "Foo");
-            q.Where(() => q1.Ex.Test == x);
-            q.Where(() => q1.Ex.Test.Contains(x));
-            q.Where(() => x.Contains(q1.Ex.Test));
-            q.Where(() => q1.Ex.Test == boom.Thing.Foo);
-            q.Where(() => q1.Ex.Test.Contains("zing" + "zoom"));
-            q.Where(() => q1.Ex.Test.Contains(q.FromTable.Ex.Test + "zoom"));
-            q.Where(() => q1.Ex.Test.Contains(q.FromTable.Ex.Test + "zap" + " " + "zoom"));
-            q.Where(() => m.Value<string>() == "Foo");
-
-            var ep = new MsSqlProcessor();
-            var sql = ep.Process(q, mascisSession);
-
+            var list = q.Execute();
             ToString();
         }
     }
@@ -390,13 +379,35 @@ namespace Mascis
     public static class QueryExtensions
     {
         public static IList<TEntity> Execute<TEntity>(this Query<TEntity> query)
+            where TEntity: class
         {
+            var queryParser = new QueryParser(query.Session);
+            var queryPlan = queryParser.Parse(query);
             var processor = new MsSqlProcessor();
-            var command = processor.Process(query, query.Session);
-            //command.Connection = query.Session.DbConnection;
-            //var reader = command.ExecuteReader();
+            var command = processor.Process(queryPlan, query.Session);
+            command.Connection = query.Session.DbConnection;
+            if (query.Session.DbConnection.State != ConnectionState.Open)
+            {
+                command.Connection.Open();
+            }
+            var reader = command.ExecuteReader();
 
-            return null;
+            var list = new List<TEntity>();
+            var cstr = typeof (TEntity).GetConstructor(new Type[0]);
+            while (reader.Read())
+            {
+                var t = (TEntity)cstr.Invoke(null);
+                foreach (var prop in queryPlan.Expression.Values)
+                {
+                    var ordinal = reader.GetOrdinal(prop.Alias);
+                    var value = reader.GetValue(ordinal);
+                    prop.MapMapping.Property.SetValue(t, value);
+                }
+                
+                list.Add(query.Session.Create(t));
+            }
+
+            return list;
         } 
     }
 }

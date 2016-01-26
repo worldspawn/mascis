@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Data;
+using System.Data.SqlClient;
 using Castle.DynamicProxy;
 
 namespace Mascis
@@ -18,6 +19,7 @@ namespace Mascis
             _generator = generator;
             Factory = factory;
 
+            DbConnection = new SqlConnection(factory.ConnectionString);
             _attachedObjects = new Dictionary<object, EntityChangeTracker>();
             _interceptor = new FooInterceptor(this, _attachedObjects);
         }
@@ -25,6 +27,14 @@ namespace Mascis
         private void Attach<T>(T entity)
         {
             _attachedObjects.Add(entity, new EntityChangeTracker(entity));
+        }
+
+        public T Create<T>(T obj)
+            where T: class
+        {
+            var proxy = _generator.CreateClassProxyWithTarget(obj, _interceptor);
+            Attach(proxy);
+            return proxy;
         }
 
         public T Create<T>()

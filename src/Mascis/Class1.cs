@@ -2,8 +2,11 @@
 using System.CodeDom;
 using System.Collections.Generic;
 using System.Configuration;
+using System.Data;
+using System.Data.SqlClient;
 using System.Linq;
 using System.Linq.Expressions;
+using System.Runtime.InteropServices;
 using System.Runtime.Remoting;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
@@ -34,6 +37,7 @@ namespace Mascis
                 {typeof(QueryTree.ColumnExpression), new ColumnExpressionParser() },
                 {typeof(QueryTree.FromExpression), new FromExpressionParser(this) },
                 {typeof(QueryTree.TableExpression), new TableExpressionParser()},
+                {typeof(QueryTree.TableAliasExpression), new TableAliasExpressionParser()},
                 {typeof(QueryTree.JoinExpression), new JoinExpressionParser(this) },
                 {typeof(QueryTree.FunctionExpression), new FunctionExpressionParser(this) }
             };
@@ -81,7 +85,20 @@ namespace Mascis
 
             public string ParseExpression(QueryTree.JoinExpression expression)
             {
-                return $"JOIN ({_parser.ParseExpression(expression.Table)}) ON {_parser.ParseExpression(expression.On)} ";//TODO: need join alias ref here
+                return $"JOIN ({_parser.ParseExpression(expression.Table)}) {_parser.ParseExpression(expression.Alias)} ON {_parser.ParseExpression(expression.On)} ";
+            }
+        }
+
+        public class TableAliasExpressionParser : IExpressionParser
+        {
+            public string ParseExpression(QueryTree.Expression expression)
+            {
+                return ParseExpression(expression as QueryTree.TableAliasExpression);
+            }
+
+            public string ParseExpression(QueryTree.TableAliasExpression expression)
+            {
+                return $"[{expression.Alias}]";
             }
         }
 
@@ -143,12 +160,24 @@ namespace Mascis
             }
         }
 
-        public string Process<TEntity>(Query<TEntity> query, MascisSession session)
+        public IDbCommand Process<TEntity>(Query<TEntity> query, MascisSession session)
         {
             var queryParser = new QueryParser(session);
             var queryPlan = queryParser.Parse(query);
+            var queryText =  ParseExpression(queryPlan.Expression);
 
-            return ParseExpression(queryPlan);
+            SqlCommand command = new SqlCommand(queryText);
+            command.CommandType = CommandType.Text;
+            foreach (var parameter in queryPlan.Parameters)
+            {
+                command.Parameters.Add(new SqlParameter()
+                {
+                    Value = parameter.Value,
+                    ParameterName = parameter.ParameterName
+                });
+            }
+
+            return command;
         }
 
         public string ParseExpression(QueryTree.Expression expression)
@@ -300,18 +329,8 @@ namespace Mascis
                 {
                     return "NULL";
                 }
-
-                if (expression.Value is bool)
-                {
-                    return (bool) expression.Value ? "1" : "0";
-                }
-
-                if (expression.Value is string)
-                {
-                    return $"'{expression.Value}'";//TODO: ... shouldn't these be parameters?
-                }
-
-                return Convert.ToString(expression.Value);//TODO: need specific code to handle each supported type
+                
+                return $"@{expression.ParameterName}";
             }
         }
 
@@ -366,5 +385,18 @@ namespace Mascis
 
             ToString();
         }
+    }
+
+    public static class QueryExtensions
+    {
+        public static IList<TEntity> Execute<TEntity>(this Query<TEntity> query)
+        {
+            var processor = new MsSqlProcessor();
+            var command = processor.Process(query, query.Session);
+            //command.Connection = query.Session.DbConnection;
+            //var reader = command.ExecuteReader();
+
+            return null;
+        } 
     }
 }

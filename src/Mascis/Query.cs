@@ -5,17 +5,14 @@ namespace Mascis
 {
     public class Query<TEntity>
     {
-        private readonly MascisSession _session;
+        public MascisSession Session { get; }
         private int _tableCounter;
-
-        private int _fieldCounter;
 
         protected Query(EntityMapping @from, MascisSession session)
         {
-            _session = session;
+            Session = session;
             _tableCounter = 0;
             FromTable = new QueryTable<TEntity>("t" + _tableCounter++, @from);
-            _fieldCounter = 0;
         }
 
         public static Query<TEntity> From(MascisSession session)
@@ -39,7 +36,7 @@ namespace Mascis
 
         public QueryTable<T> CreateTable<T>()
         {
-            var em = _session.Factory.Mappings.MappingsByType[typeof (T)];
+            var em = Session.Factory.Mappings.MappingsByType[typeof (T)];
             return new QueryTable<T>("t" + _tableCounter++, em);
         } 
         

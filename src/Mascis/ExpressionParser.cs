@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
+using Castle.Components.DictionaryAdapter;
 
 namespace Mascis
 {
@@ -11,6 +12,7 @@ namespace Mascis
         private readonly MascisSession _session;
         private readonly MethodInfo _stringContains = typeof(String).GetMethod("Contains", BindingFlags.Instance | BindingFlags.Public);
         private readonly MethodInfo _mapValue = typeof(QueryMap).GetMethod("Value", BindingFlags.Instance | BindingFlags.Public);
+        private readonly List<QueryTree.ConstantExpression> _constantExpressions = new EditableList<QueryTree.ConstantExpression>();
 
         public ExpressionParser(MascisSession session)
         {
@@ -26,6 +28,18 @@ namespace Mascis
         {
             return ParseExpression(expression.Body);
         }
+
+        public QueryTree.ConstantExpression[] GetConstantExpressionsAndClear()
+        {
+            try
+            {
+                return _constantExpressions.ToArray();
+            }
+            finally
+            {
+                _constantExpressions.Clear();
+            }
+        } 
 
         private QueryTree.Expression ParseMethodCallExpression(MethodCallExpression expression)
         {
@@ -109,6 +123,9 @@ namespace Mascis
             {
                 Value = expression.Value
             };
+
+            _constantExpressions.Add(ex);
+
             return ex;
         }
 
@@ -121,6 +138,9 @@ namespace Mascis
             {
                 Value = fieldInfo.GetValue(constantExpression.Value)
             };
+
+            _constantExpressions.Add(ex);
+
             return ex;
         }
 
@@ -164,10 +184,13 @@ namespace Mascis
                     var getter = getterLambda.Compile();
                     var value = getter();
 
-                    return new QueryTree.ConstantExpression
+                    var ex = new QueryTree.ConstantExpression
                     {
                         Value = value
                     };
+                    _constantExpressions.Add(ex);
+
+                    return ex;
                 }
             }
 

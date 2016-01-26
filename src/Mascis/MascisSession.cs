@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Data;
 using Castle.DynamicProxy;
 
 namespace Mascis
@@ -9,6 +10,8 @@ namespace Mascis
         private readonly FooInterceptor _interceptor;
         private readonly Dictionary<object, EntityChangeTracker> _attachedObjects;
         public MascisFactory Factory { get; }
+
+        public IDbConnection DbConnection { get; }//TODO:
 
         public MascisSession(MascisFactory factory, ProxyGenerator generator)
         {

@@ -7,6 +7,7 @@ namespace Mascis
         public class ConstantExpression: Expression
         {
             public object Value { get; set; }
+            public string ParameterName { get; set; }
         }
 
         public class SelectExpression : Expression
@@ -26,6 +27,12 @@ namespace Mascis
         {
             public Expression Table { get; set; }
             public Expression On { get; set; }
+            public TableAliasExpression Alias { get; set; }
+        }
+
+        public class TableAliasExpression : Expression
+        {
+            public string Alias { get; set; }
         }
 
         public class TableExpression: Expression
@@ -68,6 +75,7 @@ namespace Mascis
         {
             public string Alias { get; set; }
             public Expression Expression { get; set; }
+            public MapMapping MapMapping { get; set; }
         }
 
         public enum BooleanOperator

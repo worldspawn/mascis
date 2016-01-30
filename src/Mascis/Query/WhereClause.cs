@@ -1,7 +1,7 @@
 using System;
 using System.Linq.Expressions;
 
-namespace Mascis
+namespace Mascis.Query
 {
     public class WhereClause
     {

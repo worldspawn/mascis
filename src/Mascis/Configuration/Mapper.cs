@@ -2,11 +2,12 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
-namespace Mascis
+namespace Mascis.Configuration
 {
     public class Mapper
     {
         private readonly IEnumerable<Type> _types;
+
         public Mapper(IEnumerable<Type> types)
         {
             _types = types;
@@ -59,6 +60,6 @@ namespace Mascis
                     where MappingConfiguration.IsKey(map.Property)
                     select map
             };
-        } 
+        }
     }
 }

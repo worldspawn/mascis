@@ -3,16 +3,15 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 
-namespace Mascis
+namespace Mascis.Configuration
 {
     public class EntityMapping
     {
-        private readonly EntityMappingConfiguration _configuration;
-
-        public EntityMapping(EntityMappingConfiguration configuration, IEnumerable<MapMappingConfiguration> maps, KeyMappingConfiguration key)
+        public EntityMapping(EntityMappingConfiguration configuration, IEnumerable<MapMappingConfiguration> maps,
+            KeyMappingConfiguration key)
         {
             var keyMaps = key.Keys.Select(x => new MapMapping(x)).ToArray();
-            Maps = maps.Where(x=>!key.Keys.Contains(x)).Select(x => new MapMapping(x)).Union(keyMaps).ToArray();
+            Maps = maps.Where(x => !key.Keys.Contains(x)).Select(x => new MapMapping(x)).Union(keyMaps).ToArray();
             Key = key;
             TableName = configuration.TableName;
             Type = configuration.Type;

@@ -1,6 +1,6 @@
 using System;
 
-namespace Mascis
+namespace Mascis.Configuration
 {
     public class EntityMappingConfiguration
     {

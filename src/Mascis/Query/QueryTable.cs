@@ -1,8 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Linq.Expressions;
+using Mascis.Configuration;
 
-namespace Mascis
+namespace Mascis.Query
 {
     public abstract class QueryTable
     {
@@ -25,15 +26,14 @@ namespace Mascis
     {
         private int _fieldCounter;
 
-        public TEntity Ex { get; }
-
         public QueryTable(string alias, EntityMapping mapping)
         {
             Alias = alias;
             Mapping = mapping;
             _fieldCounter = 0;
-
         }
+
+        public TEntity Ex { get; }
 
         public QueryTable<TEntity> Where(Expression<Func<bool>> where)
         {

@@ -1,7 +1,7 @@
 using System;
 using System.Reflection;
 
-namespace Mascis
+namespace Mascis.Configuration
 {
     public interface IMappingConfiguration
     {

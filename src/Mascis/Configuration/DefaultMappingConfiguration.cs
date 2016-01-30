@@ -1,7 +1,7 @@
 using System;
 using System.Reflection;
 
-namespace Mascis
+namespace Mascis.Configuration
 {
     public abstract class DefaultMappingConfiguration : IMappingConfiguration
     {
@@ -12,7 +12,8 @@ namespace Mascis
 
         public virtual bool IsMap(PropertyInfo propertyInfo)
         {
-            return propertyInfo.CanRead && propertyInfo.GetMethod.IsVirtual && propertyInfo.GetMethod.IsPublic && !propertyInfo.GetMethod.IsAbstract;
+            return propertyInfo.CanRead && propertyInfo.GetMethod.IsVirtual && propertyInfo.GetMethod.IsPublic &&
+                   !propertyInfo.GetMethod.IsAbstract;
         }
 
         public abstract bool IsKey(PropertyInfo propertyInfo);

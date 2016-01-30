@@ -1,11 +1,11 @@
 using System;
 using System.Linq.Expressions;
+using Mascis.Configuration;
 
-namespace Mascis
+namespace Mascis.Query
 {
     public class Query<TEntity>
     {
-        public MascisSession Session { get; }
         private int _tableCounter;
 
         protected Query(EntityMapping @from, MascisSession session)
@@ -15,10 +15,15 @@ namespace Mascis
             FromTable = new QueryTable<TEntity>("t" + _tableCounter++, @from);
         }
 
+        public MascisSession Session { get; }
+
+
+        public QueryTable<TEntity> FromTable { get; set; }
+
         public static Query<TEntity> From(MascisSession session)
         {
-            var q = new Query<TEntity>(session.Factory.Mappings.MappingsByType[typeof(TEntity)], session);
-            
+            var q = new Query<TEntity>(session.Factory.Mappings.MappingsByType[typeof (TEntity)], session);
+
             return q;
         }
 
@@ -38,9 +43,6 @@ namespace Mascis
         {
             var em = Session.Factory.Mappings.MappingsByType[typeof (T)];
             return new QueryTable<T>("t" + _tableCounter++, em);
-        } 
-        
-
-        public QueryTable<TEntity> FromTable { get; set; }
+        }
     }
 }

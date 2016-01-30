@@ -1,18 +1,22 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
-using Castle.Components.DictionaryAdapter;
 
-namespace Mascis
+namespace Mascis.Query
 {
     public class ExpressionParser
     {
+        private readonly List<QueryTree.ConstantExpression> _constantExpressions =
+            new List<QueryTree.ConstantExpression>();
+
+        private readonly MethodInfo _mapValue = typeof (QueryMap).GetMethod("Value",
+            BindingFlags.Instance | BindingFlags.Public);
+
         private readonly MascisSession _session;
-        private readonly MethodInfo _stringContains = typeof(String).GetMethod("Contains", BindingFlags.Instance | BindingFlags.Public);
-        private readonly MethodInfo _mapValue = typeof(QueryMap).GetMethod("Value", BindingFlags.Instance | BindingFlags.Public);
-        private readonly List<QueryTree.ConstantExpression> _constantExpressions = new EditableList<QueryTree.ConstantExpression>();
+
+        private readonly MethodInfo _stringContains = typeof (string).GetMethod("Contains",
+            BindingFlags.Instance | BindingFlags.Public);
 
         public ExpressionParser(MascisSession session)
         {
@@ -39,7 +43,7 @@ namespace Mascis
             {
                 _constantExpressions.Clear();
             }
-        } 
+        }
 
         private QueryTree.Expression ParseMethodCallExpression(MethodCallExpression expression)
         {
@@ -48,7 +52,7 @@ namespace Mascis
                 var searchFor = ParseExpression(expression.Arguments[0]);
                 var source = ParseExpression(expression.Object);
 
-                return new QueryTree.FunctionExpression()
+                return new QueryTree.FunctionExpression
                 {
                     Name = "CHARINDEXOF",
                     Arguments = new[]
@@ -96,7 +100,6 @@ namespace Mascis
                     var ex = ParseMemberExpression(memberExpression);
                     return ex;
                 }
-                
             }
 
             var constantExpression = expression as ConstantExpression;
@@ -111,10 +114,11 @@ namespace Mascis
             {
                 var ex = ParseMethodCallExpression(methodExpression);
 
-                return ex; ;
+                return ex;
+                ;
             }
 
-            throw new UnknownExpression();
+            throw new UnknownExpressionException();
         }
 
         private QueryTree.ConstantExpression ParseConstantExpression(ConstantExpression expression)
@@ -147,20 +151,21 @@ namespace Mascis
         private QueryTree.ColumnExpression ParseColumnExpression(MemberExpression expression)
         {
             var entityMapping = _session.Factory.Mappings.MappingsByType[expression.Member.DeclaringType];
-            var property = (PropertyInfo)expression.Member;
+            var property = (PropertyInfo) expression.Member;
             var propertyMap = entityMapping.InterceptPropertyDictionary[property];
 
             var fex = expression.Expression as MemberExpression;
 
-            while (!fex.Type.IsGenericType || fex.Type.GetGenericTypeDefinition() != typeof(QueryTable<>))//walking up the expression till we get to the querytable
+            while (!fex.Type.IsGenericType || fex.Type.GetGenericTypeDefinition() != typeof (QueryTable<>))
+                //walking up the expression till we get to the querytable
             {
                 fex = fex.Expression as MemberExpression;
             }
 
-            var objectMember = Expression.Convert(fex, typeof(object));
+            var objectMember = Expression.Convert(fex, typeof (object));
             var getterLambda = Expression.Lambda<Func<object>>(objectMember);
             var getter = getterLambda.Compile();
-            var queryTable = (QueryTable)getter();
+            var queryTable = (QueryTable) getter();
 
             var ex = new QueryTree.ColumnExpression
             {
@@ -179,7 +184,7 @@ namespace Mascis
                 expression = expression.Expression as MemberExpression;
                 if (expression == null)
                 {
-                    var objectMember = Expression.Convert(startedWith, typeof(object));
+                    var objectMember = Expression.Convert(startedWith, typeof (object));
                     var getterLambda = Expression.Lambda<Func<object>>(objectMember);
                     var getter = getterLambda.Compile();
                     var value = getter();
@@ -199,7 +204,6 @@ namespace Mascis
 
         private QueryTree.BinaryExpression ParseBinaryExpression(BinaryExpression binaryExpression)
         {
-
             var ex = new QueryTree.BinaryExpression
             {
                 Left = ParseExpression(binaryExpression.Left),
@@ -233,7 +237,7 @@ namespace Mascis
                 case ExpressionType.LessThanOrEqual:
                     return QueryTree.BooleanOperator.LessThanOrEqualTo;
                 default:
-                    throw new UnknownNodeType();
+                    throw new UnknownNodeTypeException();
             }
         }
     }

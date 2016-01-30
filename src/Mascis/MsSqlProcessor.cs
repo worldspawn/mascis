@@ -1,27 +1,14 @@
-﻿using System;
-using System.CodeDom;
+using System;
 using System.Collections.Generic;
-using System.Configuration;
 using System.Data;
 using System.Data.SqlClient;
 using System.Linq;
-using System.Linq.Expressions;
-using System.Runtime.InteropServices;
-using System.Runtime.Remoting;
-using System.Security.Cryptography.X509Certificates;
 using System.Text;
-using System.Threading.Tasks;
-using Castle.Core.Internal;
-using Castle.DynamicProxy.Generators.Emitters.SimpleAST;
+using Mascis.Query;
 
 namespace Mascis
 {
-    public interface IExpressionParser
-    {
-        string ParseExpression(QueryTree.Expression expression);
-    }
-
-    public class MsSqlProcessor: IExpressionParser
+    public class MsSqlProcessor : IExpressionParser
     {
         private readonly Dictionary<Type, IExpressionParser> _parsers;
 
@@ -31,16 +18,45 @@ namespace Mascis
             {
                 {typeof (QueryTree.ConstantExpression), new ConstantExpressionParser()},
                 {typeof (QueryTree.AliasedExpression), new AliasedExpressionParser(this)},
-                {typeof(QueryTree.SelectExpression), new SelectExpressionParser(this)},
-                {typeof(QueryTree.BinaryExpression), new BinaryExpressionParser(this)},
-                {typeof(QueryTree.AliasReferenceExpression), new AliasReferenceExpressionParser() },
-                {typeof(QueryTree.ColumnExpression), new ColumnExpressionParser() },
-                {typeof(QueryTree.FromExpression), new FromExpressionParser(this) },
-                {typeof(QueryTree.TableExpression), new TableExpressionParser()},
-                {typeof(QueryTree.TableAliasExpression), new TableAliasExpressionParser()},
-                {typeof(QueryTree.JoinExpression), new JoinExpressionParser(this) },
-                {typeof(QueryTree.FunctionExpression), new FunctionExpressionParser(this) }
+                {typeof (QueryTree.SelectExpression), new SelectExpressionParser(this)},
+                {typeof (QueryTree.BinaryExpression), new BinaryExpressionParser(this)},
+                {typeof (QueryTree.AliasReferenceExpression), new AliasReferenceExpressionParser()},
+                {typeof (QueryTree.ColumnExpression), new ColumnExpressionParser()},
+                {typeof (QueryTree.FromExpression), new FromExpressionParser(this)},
+                {typeof (QueryTree.TableExpression), new TableExpressionParser()},
+                {typeof (QueryTree.TableAliasExpression), new TableAliasExpressionParser()},
+                {typeof (QueryTree.JoinExpression), new JoinExpressionParser(this)},
+                {typeof (QueryTree.FunctionExpression), new FunctionExpressionParser(this)},
+                {typeof (QueryTree.InsertExpression), new InsertExpressionParser(this)},
+                {typeof (QueryTree.UnAliasedColumnExpression), new UnAliasedColumnExpressionParser()},
+                {typeof (QueryTree.UnAliasedTableExpression), new UnAliasedTableExpressionParser()},
+                {typeof (QueryTree.ValueGroupExpression), new ValueGroupExpressionParser(this)},
+                {typeof (QueryTree.UpdateExpression), new UpdateExpressionParser(this)}
             };
+        }
+
+        public string ParseExpression(QueryTree.Expression expression)
+        {
+            var parser = _parsers[expression.GetType()];
+            return parser.ParseExpression(expression);
+        }
+
+        public IDbCommand Process(ParsedQuery queryPlan, MascisSession session)
+        {
+            var queryText = ParseExpression(queryPlan.Expression);
+
+            var command = new SqlCommand(queryText);
+            command.CommandType = CommandType.Text;
+            foreach (var parameter in queryPlan.Parameters)
+            {
+                command.Parameters.Add(new SqlParameter
+                {
+                    Value = parameter.Value,
+                    ParameterName = parameter.ParameterName
+                });
+            }
+
+            return command;
         }
 
         public class FunctionExpressionParser : IExpressionParser
@@ -62,7 +78,8 @@ namespace Mascis
                 switch (expression.Name.ToLower())
                 {
                     case "charindexof":
-                        return $"(CHARINDEXOF({_parser.ParseExpression(expression.Arguments[0])}, {_parser.ParseExpression(expression.Arguments[1])}) > -1)";
+                        return
+                            $"(CHARINDEXOF({_parser.ParseExpression(expression.Arguments[0])}, {_parser.ParseExpression(expression.Arguments[1])}) > -1)";
                 }
 
                 throw new UnknownFunctionException();
@@ -85,9 +102,10 @@ namespace Mascis
 
             public string ParseExpression(QueryTree.JoinExpression expression)
             {
-                bool includeAlias = expression.Table is QueryTree.SelectExpression;
+                var includeAlias = expression.Table is QueryTree.SelectExpression;
                 var alias = includeAlias ? _parser.ParseExpression(expression.Alias) : null;
-                return $"JOIN {_parser.ParseExpression(expression.Table)} {alias} ON {_parser.ParseExpression(expression.On)} ";
+                return
+                    $"JOIN {_parser.ParseExpression(expression.Table)} {alias} ON {_parser.ParseExpression(expression.On)} ";
             }
         }
 
@@ -120,6 +138,7 @@ namespace Mascis
         public class FromExpressionParser : IExpressionParser
         {
             private readonly IExpressionParser _parser;
+
             public FromExpressionParser(IExpressionParser parser)
             {
                 _parser = parser;
@@ -162,33 +181,10 @@ namespace Mascis
             }
         }
 
-        public IDbCommand Process(ParsedQuery queryPlan, MascisSession session)
-        {
-            var queryText =  ParseExpression(queryPlan.Expression);
-
-            SqlCommand command = new SqlCommand(queryText);
-            command.CommandType = CommandType.Text;
-            foreach (var parameter in queryPlan.Parameters)
-            {
-                command.Parameters.Add(new SqlParameter()
-                {
-                    Value = parameter.Value,
-                    ParameterName = parameter.ParameterName
-                });
-            }
-
-            return command;
-        }
-
-        public string ParseExpression(QueryTree.Expression expression)
-        {
-            var parser = _parsers[expression.GetType()];
-            return parser.ParseExpression(expression);
-        }
-
-        public class BinaryExpressionParser: IExpressionParser
+        public class BinaryExpressionParser : IExpressionParser
         {
             private readonly IExpressionParser _parser;
+
             public BinaryExpressionParser(IExpressionParser parser)
             {
                 _parser = parser;
@@ -232,6 +228,108 @@ namespace Mascis
                         throw new UnknownOperatorException();
                 }
                 return $"({_parser.ParseExpression(expression.Left)} {op} {_parser.ParseExpression(expression.Right)})";
+            }
+        }
+
+        public class UpdateExpressionParser : IExpressionParser
+        {
+            private readonly IExpressionParser _parser;
+
+            public UpdateExpressionParser(IExpressionParser parser)
+            {
+                _parser = parser;
+            }
+
+            public string ParseExpression(QueryTree.Expression expression)
+            {
+                return ParseExpression(expression as QueryTree.UpdateExpression);
+            }
+
+            private string ParseExpression(QueryTree.UpdateExpression expression)
+            {
+                var sb = new StringBuilder();
+                sb.Append("UPDATE " + _parser.ParseExpression(expression.Update));
+                sb.Append(" SET ");
+                sb.Append(string.Join(", ",
+                    expression.Set.Select(x => $"{_parser.ParseExpression(x.Key)} = {_parser.ParseExpression(x.Value)}")
+                        .ToArray()));
+                sb.Append(" WHERE ");
+                sb.Append(string.Join(" AND ", expression.Where.Select(x => _parser.ParseExpression(x))));
+                return sb.ToString();
+            }
+        }
+
+        public class InsertExpressionParser : IExpressionParser
+        {
+            private readonly IExpressionParser _parser;
+
+            public InsertExpressionParser(IExpressionParser parser)
+            {
+                _parser = parser;
+            }
+
+            public string ParseExpression(QueryTree.Expression expression)
+            {
+                return ParseExpression(expression as QueryTree.InsertExpression);
+            }
+
+            private string ParseExpression(QueryTree.InsertExpression expression)
+            {
+                var qb = new StringBuilder();
+                qb.Append("INSERT INTO ");
+                qb.Append(_parser.ParseExpression(expression.Into));
+                qb.Append("(");
+                qb.Append(string.Join(",", expression.Columns.Select(x => _parser.ParseExpression(x)).ToArray()));
+                qb.Append(")");
+                qb.Append(_parser.ParseExpression(expression.From));
+                return qb.ToString();
+            }
+        }
+
+        public class UnAliasedTableExpressionParser : IExpressionParser
+        {
+            public string ParseExpression(QueryTree.Expression expression)
+            {
+                return ParseExpression(expression as QueryTree.UnAliasedTableExpression);
+            }
+
+            private string ParseExpression(QueryTree.UnAliasedTableExpression expression)
+            {
+                return $"[{expression.Table}]";
+            }
+        }
+
+        public class UnAliasedColumnExpressionParser : IExpressionParser
+        {
+            public string ParseExpression(QueryTree.Expression expression)
+            {
+                return ParseExpression(expression as QueryTree.UnAliasedColumnExpression);
+            }
+
+            private string ParseExpression(QueryTree.UnAliasedColumnExpression expression)
+            {
+                return $"[{expression.Column}]";
+            }
+        }
+
+        public class ValueGroupExpressionParser : IExpressionParser
+        {
+            private readonly IExpressionParser _parser;
+
+            public ValueGroupExpressionParser(IExpressionParser parser)
+            {
+                _parser = parser;
+            }
+
+            public string ParseExpression(QueryTree.Expression expression)
+            {
+                return ParseExpression(expression as QueryTree.ValueGroupExpression);
+            }
+
+            private string ParseExpression(QueryTree.ValueGroupExpression expression)
+            {
+                return
+                    $"VALUES ({string.Join(",", expression.Values.Select(x => _parser.ParseExpression(x)).ToArray())})";
             }
         }
 
@@ -316,7 +414,7 @@ namespace Mascis
             }
         }
 
-        public class ConstantExpressionParser: IExpressionParser
+        public class ConstantExpressionParser : IExpressionParser
         {
             public string ParseExpression(QueryTree.Expression expression)
             {
@@ -329,85 +427,9 @@ namespace Mascis
                 {
                     return "NULL";
                 }
-                
+
                 return $"@{expression.ParameterName}";
             }
         }
-
-        
-    }
-
-    internal class UnknownOperatorException : Exception
-    {
-    }
-
-    public class Order
-    {
-        public virtual Guid Id { get; set; }
-        public virtual string Name { get; set; }
-    }
-
-    public class OrderItem
-    {
-        public virtual Guid Id { get; set; }
-        public virtual Guid OrderId { get; set; }
-        public virtual string Product { get; set; }
-        public virtual int Amount { get; set; }
-    }
-
-    public class Class1
-    {
-        public Class1()
-        {
-            var mapper = new Mapper(new [] {typeof(Order), typeof(OrderItem)});
-            mapper.MappingConfiguration = new FooMappingConfiguration();
-            var mappings = mapper.Build();
-            var connectionString = "data source=.;integrated security=sspi;initial catalog=mascis";
-            var mascisFactory = new MascisFactory(mappings, connectionString);
-            var mascisSession = mascisFactory.Start();
-            
-
-            var q = mascisSession.Query<Order>();
-            var q1 = q.CreateTable<OrderItem>();
-            q.FromTable.Join(q1, () => q.FromTable.Ex.Id == q1.Ex.OrderId);
-
-            var list = q.Execute();
-            ToString();
-        }
-    }
-
-    public static class QueryExtensions
-    {
-        public static IList<TEntity> Execute<TEntity>(this Query<TEntity> query)
-            where TEntity: class
-        {
-            var queryParser = new QueryParser(query.Session);
-            var queryPlan = queryParser.Parse(query);
-            var processor = new MsSqlProcessor();
-            var command = processor.Process(queryPlan, query.Session);
-            command.Connection = query.Session.DbConnection;
-            if (query.Session.DbConnection.State != ConnectionState.Open)
-            {
-                command.Connection.Open();
-            }
-            var reader = command.ExecuteReader();
-
-            var list = new List<TEntity>();
-            var cstr = typeof (TEntity).GetConstructor(new Type[0]);
-            while (reader.Read())
-            {
-                var t = (TEntity)cstr.Invoke(null);
-                foreach (var prop in queryPlan.Expression.Values)
-                {
-                    var ordinal = reader.GetOrdinal(prop.Alias);
-                    var value = reader.GetValue(ordinal);
-                    prop.MapMapping.Property.SetValue(t, value);
-                }
-                
-                list.Add(query.Session.Create(t));
-            }
-
-            return list;
-        } 
     }
 }

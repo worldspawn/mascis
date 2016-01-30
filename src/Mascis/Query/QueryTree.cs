@@ -1,10 +1,27 @@
 using System.Collections.Generic;
+using Mascis.Configuration;
 
-namespace Mascis
+namespace Mascis.Query
 {
     public static class QueryTree
     {
-        public class ConstantExpression: Expression
+        public enum BooleanOperator
+        {
+            Unknown,
+            And,
+            Or,
+            Equal,
+            GreaterThan,
+            GreaterThanOrEqualTo,
+            LessThan,
+            LessThanOrEqualTo,
+            Add,
+            Subtract,
+            Multiply,
+            Divide
+        }
+
+        public class ConstantExpression : Expression
         {
             public object Value { get; set; }
             public string ParameterName { get; set; }
@@ -13,17 +30,17 @@ namespace Mascis
         public class SelectExpression : Expression
         {
             public Expression From { get; set; }
-            public IList<AliasedExpression> Values { get; set; } 
+            public IList<AliasedExpression> Values { get; set; }
             public IList<JoinExpression> Join { get; } = new List<JoinExpression>();
             public IList<Expression> Where { get; } = new List<Expression>();
         }
 
-        public class FromExpression: Expression
+        public class FromExpression : Expression
         {
             public TableExpression Table { get; set; }
         }
 
-        public class JoinExpression: Expression
+        public class JoinExpression : Expression
         {
             public Expression Table { get; set; }
             public Expression On { get; set; }
@@ -35,10 +52,15 @@ namespace Mascis
             public string Alias { get; set; }
         }
 
-        public class TableExpression: Expression
+        public class UnAliasedTableExpression : Expression
         {
             public string Table { get; set; }
-            public string TableAlias { get; set; } 
+        }
+
+        public class TableExpression : Expression
+        {
+            public string Table { get; set; }
+            public string TableAlias { get; set; }
         }
 
         public class BinaryExpression : Expression
@@ -50,8 +72,13 @@ namespace Mascis
 
         public class ColumnExpression : Expression
         {
-            public string Column { get; set; } 
+            public string Column { get; set; }
             public string TableAlias { get; set; }
+        }
+
+        public class UnAliasedColumnExpression : Expression
+        {
+            public string Column { get; set; }
         }
 
         public class FunctionExpression : Expression
@@ -73,25 +100,28 @@ namespace Mascis
             public MapMapping MapMapping { get; set; }
         }
 
-        public enum BooleanOperator
-        {
-            Unknown,
-            And,
-            Or,
-            Equal,
-            GreaterThan,
-            GreaterThanOrEqualTo,
-            LessThan,
-            LessThanOrEqualTo,
-            Add,
-            Subtract,
-            Multiply,
-            Divide
-        }
-
         public abstract class Expression
         {
-            
+        }
+
+        public class ValueGroupExpression : Expression
+        {
+            public IList<Expression> Values { get; set; }
+        }
+
+        public class InsertExpression : Expression
+        {
+            public UnAliasedTableExpression Into { get; set; }
+
+            public IList<UnAliasedColumnExpression> Columns { get; set; }
+            public Expression From { get; set; }
+        }
+
+        public class UpdateExpression : Expression
+        {
+            public UnAliasedTableExpression Update { get; set; }
+            public Dictionary<UnAliasedColumnExpression, ConstantExpression> Set { get; set; }
+            public IList<BinaryExpression> Where { get; set; }
         }
     }
 }

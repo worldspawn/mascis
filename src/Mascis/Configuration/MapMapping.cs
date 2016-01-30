@@ -1,6 +1,6 @@
 using System.Reflection;
 
-namespace Mascis
+namespace Mascis.Configuration
 {
     public class MapMapping
     {

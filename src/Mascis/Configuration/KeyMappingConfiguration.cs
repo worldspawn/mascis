@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace Mascis
+namespace Mascis.Configuration
 {
     public class KeyMappingConfiguration
     {

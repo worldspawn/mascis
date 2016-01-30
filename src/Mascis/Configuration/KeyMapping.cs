@@ -1,12 +1,12 @@
-namespace Mascis
+namespace Mascis.Configuration
 {
     public class KeyMapping
     {
-        public MapMapping[] Columns { get; }
-
         public KeyMapping(MapMapping[] columns)
         {
             Columns = columns;
         }
+
+        public MapMapping[] Columns { get; }
     }
 }

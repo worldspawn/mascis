@@ -45,8 +45,7 @@ namespace Mascis
         {
             var queryText = ParseExpression(queryPlan.Expression);
 
-            var command = new SqlCommand(queryText);
-            command.CommandType = CommandType.Text;
+            var command = new SqlCommand(queryText) {CommandType = CommandType.Text};
             foreach (var parameter in queryPlan.Parameters)
             {
                 command.Parameters.Add(new SqlParameter
@@ -354,14 +353,7 @@ namespace Mascis
                 foreach (var column in expression.Values)
                 {
                     qb.Append(_parser.ParseExpression(column));
-                    if (expression.Values.IndexOf(column) + 1 < expression.Values.Count)
-                    {
-                        qb.Append(", ");
-                    }
-                    else
-                    {
-                        qb.Append(" ");
-                    }
+                    qb.Append(expression.Values.IndexOf(column) + 1 < expression.Values.Count ? ", " : " ");
                 }
 
                 if (expression.From != null)
@@ -378,14 +370,7 @@ namespace Mascis
                         foreach (var where in expression.Where)
                         {
                             qb.Append(_parser.ParseExpression(where));
-                            if (expression.Where.IndexOf(where) + 1 < expression.Where.Count)
-                            {
-                                qb.Append(" AND ");
-                            }
-                            else
-                            {
-                                qb.Append(" ");
-                            }
+                            qb.Append(expression.Where.IndexOf(@where) + 1 < expression.Where.Count ? " AND " : " ");
                         }
                     }
                 }

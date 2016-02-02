@@ -1,3 +1,4 @@
+using Castle.DynamicProxy;
 using Mascis.Configuration;
 
 namespace Mascis
@@ -8,7 +9,10 @@ namespace Mascis
         {
             ConnectionString = connectionString;
             Mappings = mappings;
+            Generator = new ProxyGenerator();
         }
+
+        internal ProxyGenerator Generator { get; }
 
         public string ConnectionString { get; }
 

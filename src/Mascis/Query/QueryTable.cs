@@ -26,11 +26,13 @@ namespace Mascis.Query
     {
         private int _fieldCounter;
 
-        public QueryTable(string alias, EntityMapping mapping)
+        public QueryTable(string alias, EntityMapping mapping, MascisSession session)
         {
             Alias = alias;
             Mapping = mapping;
             _fieldCounter = 0;
+            
+            Ex = (TEntity)session.Factory.Generator.CreateClassProxy(typeof(TEntity), new[] { typeof(IQueryTableReference)}, new QueryTableReferenceInterceptor(this));
         }
 
         public TEntity Ex { get; }
@@ -47,11 +49,45 @@ namespace Mascis.Query
             return this;
         }
 
+        public QueryTable<TEntity> Join<T>(QueryTable<T> queryTable, Expression<Func<T, bool>> on)
+        {
+            var constant = Expression.Constant(queryTable.Ex);
+            var ev = new ParameterToConstantExpressionVisitor<Func<bool>>(constant);
+            var convertedOn = ev.VisitAndConvert(on);
+            Joins.Add(new QueryJoin(convertedOn, queryTable));
+            return this;
+        }
+
         public QueryMap Map(Expression<Func<object>> expression)
         {
             var qm = new QueryMap(expression, "f" + _fieldCounter++, this);
             Maps.Add(qm);
             return qm;
+        }
+
+        public class ParameterToConstantExpressionVisitor<TOutput> : ExpressionVisitor
+        {
+            private readonly ConstantExpression _expression;
+
+            internal Expression<TOutput> VisitAndConvert<T>(Expression<T> root)
+            {
+                return (Expression<TOutput>)VisitLambda(root);
+            }
+
+            public ParameterToConstantExpressionVisitor(ConstantExpression expression)
+            {
+                _expression = expression;
+            }
+
+            protected override Expression VisitParameter(ParameterExpression node)
+            {
+                return _expression;
+            }
+
+            protected override Expression VisitLambda<T>(Expression<T> node)
+            {
+                return Expression.Lambda<TOutput>(Visit(node.Body));
+            }
         }
     }
 }

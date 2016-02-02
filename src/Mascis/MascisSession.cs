@@ -7,7 +7,7 @@ using Mascis.Query;
 
 namespace Mascis
 {
-    public class MascisSession
+    public class MascisSession: IDisposable
     {
         //private readonly ProxyGenerator _generator;
         //private readonly FooInterceptor _interceptor;
@@ -63,7 +63,11 @@ namespace Mascis
             var entityMapping = Factory.Mappings.MappingsByType[t];
             var state = new object[entityMapping.Maps.Length];
             var cstr = t.GetConstructor(new Type[0]);
-            var entity = (T) cstr.Invoke(null);
+            var entity = (T) cstr?.Invoke(null);
+            if (entity == null)
+            {
+                throw new NoDefaultConstructorException();
+            }
             Attach(entity, state);
             return entity;
         }
@@ -102,6 +106,12 @@ namespace Mascis
             if (expression == null) throw new NullReferenceException(nameof(expression));
             var processor = new MsSqlProcessor();
             var list = new List<TEntity>();
+            var cstr = typeof(TEntity).GetConstructor(new Type[0]);
+            if (cstr == null)
+            {
+                throw new NoDefaultConstructorException();
+            }
+
             using (var command = processor.Process(queryPlan, this))
             {
                 command.Connection = query.Session.DbConnection;
@@ -111,7 +121,6 @@ namespace Mascis
                 }
                 using (var reader = command.ExecuteReader())
                 {
-                    var cstr = typeof (TEntity).GetConstructor(new Type[0]);
                     while (reader.Read())
                     {
                         var t = (TEntity) cstr.Invoke(null);
@@ -132,8 +141,6 @@ namespace Mascis
 
         private void Insert(object entity)
         {
-            var state = CreateState(entity);
-            var em = Factory.Mappings.MappingsByType[entity.GetType()];
             var queryPlan = Parser.Insert(entity);
 
             var processor = new MsSqlProcessor();
@@ -182,6 +189,14 @@ namespace Mascis
         public Query<TEntity> Query<TEntity>()
         {
             return Mascis.Query.Query<TEntity>.From(this);
+        }
+
+        public void Dispose()
+        {
+            if (DbConnection != null && DbConnection.State == ConnectionState.Open)
+            {
+                DbConnection.Close();
+            }
         }
     }
 }

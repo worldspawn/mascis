@@ -115,7 +115,6 @@ namespace Mascis.Query
                 var ex = ParseMethodCallExpression(methodExpression);
 
                 return ex;
-                ;
             }
 
             throw new UnknownExpressionException();
@@ -123,9 +122,14 @@ namespace Mascis.Query
 
         private QueryTree.ConstantExpression ParseConstantExpression(ConstantExpression expression)
         {
+            return ParseConstantExpression(expression.Value);
+        }
+
+        private QueryTree.ConstantExpression ParseConstantExpression(object value)
+        {
             var ex = new QueryTree.ConstantExpression
             {
-                Value = expression.Value
+                Value = value
             };
 
             _constantExpressions.Add(ex);
@@ -148,32 +152,59 @@ namespace Mascis.Query
             return ex;
         }
 
-        private QueryTree.ColumnExpression ParseColumnExpression(MemberExpression expression)
+        private object GetValueFromExpression(Expression expression)
+        {
+            var objectMember = Expression.Convert(expression, typeof(object));
+            var getterLambda = Expression.Lambda<Func<object>>(objectMember);
+            var getter = getterLambda.Compile();
+            return getter();
+        }
+
+        private QueryTree.Expression ParseColumnExpression(MemberExpression expression)
         {
             var entityMapping = _session.Factory.Mappings.MappingsByType[expression.Member.DeclaringType];
             var property = (PropertyInfo) expression.Member;
             var propertyMap = entityMapping.InterceptPropertyDictionary[property];
 
-            var fex = expression.Expression as MemberExpression;
+            var fex = (Expression)expression;
+            var refType = typeof (IQueryTableReference);
 
-            while (!fex.Type.IsGenericType || fex.Type.GetGenericTypeDefinition() != typeof (QueryTable<>))
-                //walking up the expression till we get to the querytable
+            while (true)
             {
-                fex = fex.Expression as MemberExpression;
+                var fexType = GetTypeFromExpression(fex);
+                if (_session.Factory.Mappings.MappingsByType.ContainsKey(fexType) || _session.Factory.Mappings.MappingsByType.ContainsKey(fexType.BaseType))
+                {
+                    var entity = GetValueFromExpression(fex);
+                    if (refType.IsInstanceOfType(entity))
+                    {
+                        var qt = (IQueryTableReference) entity;
+                        return new QueryTree.ColumnExpression
+                        {
+                            Column = propertyMap.ColumnName,
+                            TableAlias = qt.QueryTable.Alias
+                        };
+                    }
+
+                    return ParseConstantExpression(GetValueFromExpression(expression));
+                }
+
+                fex = ((MemberExpression)fex).Expression;
+            }
+        }
+
+        private Type GetTypeFromExpression(Expression expression)
+        {
+            if (expression is MemberExpression)
+            {
+                return ((MemberExpression) expression).Type;
             }
 
-            var objectMember = Expression.Convert(fex, typeof (object));
-            var getterLambda = Expression.Lambda<Func<object>>(objectMember);
-            var getter = getterLambda.Compile();
-            var queryTable = (QueryTable) getter();
-
-            var ex = new QueryTree.ColumnExpression
+            if (expression is ConstantExpression)
             {
-                Column = propertyMap.ColumnName,
-                TableAlias = queryTable.Alias
-            };
+                return ((ConstantExpression) expression).Type;
+            }
 
-            return ex;
+            return null;
         }
 
         private QueryTree.Expression ParseMemberExpression(MemberExpression expression)

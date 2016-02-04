@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using Mascis.Configuration;
 
 namespace Mascis.Query
@@ -8,9 +9,9 @@ namespace Mascis.Query
     public class QueryParser
     {
         private readonly ExpressionParser _binaryParser;
-        private readonly MascisSession _session;
+        private readonly IMascisSession _session;
 
-        public QueryParser(MascisSession session)
+        public QueryParser(IMascisSession session)
         {
             _session = session;
             _binaryParser = new ExpressionParser(_session);
@@ -100,9 +101,38 @@ namespace Mascis.Query
             return update;
         }
 
-        public QueryTree.SelectExpression Parse(QueryTable queryTable)
+        public ParsedProjection Parse<T, TEntity>(Projection<T, TEntity> projection)
         {
-            var isSubQuery = queryTable.Maps.Count > 0;
+            var select = Parse(projection.Query.FromTable, true);
+            var values = _binaryParser.Parse(projection.Expression) as QueryTree.ProjectionAliasesExpression;
+            if (values == null) throw new ArgumentNullException(nameof(values));
+            select.Values.Clear();
+            select.Values = values.ConstructorArguments.Select(x => new QueryTree.AliasedExpression
+            {
+                Alias = x.Expression.Alias,
+                Expression = x.Expression.Expression
+            })
+            .Union(values.MemberAssignments.Select(x=> new QueryTree.AliasedExpression
+            {
+                Alias = x.Expression.Alias,
+                Expression = x.Expression.Expression
+            }))
+            .ToList();
+            
+            var parameters = _binaryParser.GetConstantExpressionsAndClear();
+            var parameterCount = 0;
+            Array.ForEach(parameters, x => x.ParameterName = "p" + parameterCount++);
+
+            return new ParsedProjection
+            {
+                Constructor = values,
+                Expression = select,
+                Parameters = parameters
+            };
+        }
+
+        public QueryTree.SelectExpression Parse(QueryTable queryTable, bool isSubQuery = false)
+        {
             var ex = new QueryTree.SelectExpression
             {
                 Values = queryTable.Maps.Select(x => new QueryTree.AliasedExpression
@@ -199,5 +229,12 @@ namespace Mascis.Query
                 return expression;
             }
         }
+    }
+
+    public class ParsedProjection
+    {
+        public QueryTree.ProjectionAliasesExpression Constructor { get; set; }
+        public QueryTree.SelectExpression Expression { get; set; }
+        public QueryTree.ConstantExpression[] Parameters { get; set; }
     }
 }

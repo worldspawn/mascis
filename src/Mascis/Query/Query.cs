@@ -1,25 +1,45 @@
 using System;
+using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using System.Linq;
 using System.Linq.Expressions;
 using Mascis.Configuration;
 
 namespace Mascis.Query
 {
+    public class Projection<T, TEntity>
+    {
+        internal readonly Query<TEntity> Query;
+        internal readonly Expression<Func<T>> Expression;
+
+        public Projection(Query<TEntity> query, Expression<Func<T>> expression)
+        {
+            Query = query;
+            Expression = expression;
+        }
+    }
+
     public class Query<TEntity>
     {
         private int _tableCounter;
 
-        protected Query(EntityMapping @from, MascisSession session)
+        protected Query(EntityMapping @from, IMascisSession session)
         {
             Session = session;
             _tableCounter = 0;
             FromTable = new QueryTable<TEntity>("t" + _tableCounter++, @from, session);
         }
 
-        public MascisSession Session { get; }
-        
+        public IMascisSession Session { get; }
+
         public QueryTable<TEntity> FromTable { get; set; }
 
-        public static Query<TEntity> From(MascisSession session)
+        public Projection<T, TEntity> Project<T>(Expression<Func<T>> expression)
+        {
+            return new Projection<T, TEntity>(this, expression);
+        }
+
+        public static Query<TEntity> From(IMascisSession session)
         {
             var q = new Query<TEntity>(session.Factory.Mappings.MappingsByType[typeof (TEntity)], session);
 

@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Reflection;
 using Mascis.Configuration;
 
 namespace Mascis.Query
@@ -33,6 +34,25 @@ namespace Mascis.Query
             public IList<AliasedExpression> Values { get; set; }
             public IList<JoinExpression> Join { get; } = new List<JoinExpression>();
             public IList<Expression> Where { get; } = new List<Expression>();
+        }
+
+        public class ProjectionAliasesExpression : Expression
+        {
+            public IList<ProjectionConstructorArgumentExpression> ConstructorArguments { get; set; }
+            public IList<ProjectionMemberAssignmentExpression> MemberAssignments { get; set; }
+            public ConstructorInfo Constructor { get; set; }
+        }
+
+        public class ProjectionConstructorArgumentExpression : Expression
+        {
+            public int Index { get; set; }
+            public AliasedExpression Expression { get; set; }
+        }
+
+        public class ProjectionMemberAssignmentExpression : Expression
+        {
+            public MemberInfo Member { get; set; }
+            public AliasedExpression Expression { get; set; }
         }
 
         public class FromExpression : Expression

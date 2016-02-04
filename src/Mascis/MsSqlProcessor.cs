@@ -41,12 +41,17 @@ namespace Mascis
             return parser.ParseExpression(expression);
         }
 
-        public IDbCommand Process(ParsedQuery queryPlan, MascisSession session)
+        public IDbCommand Process(ParsedQuery queryPlan, IMascisSession session)
         {
-            var queryText = ParseExpression(queryPlan.Expression);
+            return Process(queryPlan.Expression, queryPlan.Parameters, session);
+        }
 
-            var command = new SqlCommand(queryText) {CommandType = CommandType.Text};
-            foreach (var parameter in queryPlan.Parameters)
+        public IDbCommand Process(QueryTree.Expression expression, IEnumerable<QueryTree.ConstantExpression> parameters, IMascisSession session)
+        {
+            var queryText = ParseExpression(expression);
+
+            var command = new SqlCommand(queryText) { CommandType = CommandType.Text };
+            foreach (var parameter in parameters)
             {
                 command.Parameters.Add(new SqlParameter
                 {
@@ -327,8 +332,7 @@ namespace Mascis
 
             private string ParseExpression(QueryTree.ValueGroupExpression expression)
             {
-                return
-                    $"VALUES ({string.Join(",", expression.Values.Select(x => _parser.ParseExpression(x)).ToArray())})";
+                return $"VALUES ({string.Join(",", expression.Values.Select(x => _parser.ParseExpression(x)).ToArray())})";
             }
         }
 

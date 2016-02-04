@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
 
@@ -13,20 +14,25 @@ namespace Mascis.Query
         private readonly MethodInfo _mapValue = typeof (QueryMap).GetMethod("Value",
             BindingFlags.Instance | BindingFlags.Public);
 
-        private readonly MascisSession _session;
+        private readonly IMascisSession _session;
 
         private readonly MethodInfo _stringContains = typeof (string).GetMethod("Contains",
             BindingFlags.Instance | BindingFlags.Public);
 
-        public ExpressionParser(MascisSession session)
+        public ExpressionParser(IMascisSession session)
         {
             _session = session;
         }
 
-        public QueryTree.Expression Parse(Expression<Func<object>> expression)
+        public QueryTree.Expression Parse<T>(Expression<Func<T>> expression)
         {
             return ParseExpression(expression.Body);
         }
+
+        //public QueryTree.Expression Parse(Expression<Func<object>> expression)
+        //{
+        //    return ParseExpression(expression.Body);
+        //}
 
         public QueryTree.Expression Parse(Expression<Func<bool>> expression)
         {
@@ -113,11 +119,65 @@ namespace Mascis.Query
             if (methodExpression != null)
             {
                 var ex = ParseMethodCallExpression(methodExpression);
+                return ex;
+            }
 
+            var memberInitExpression = expression as MemberInitExpression;
+            if (memberInitExpression != null)
+            {
+                var ex = ParseMemberInitExpression(memberInitExpression);
+                return ex;
+            }
+
+            var newExpression = expression as NewExpression;
+            if (newExpression != null)
+            {
+                var ex = ParseNewExpression(newExpression);
                 return ex;
             }
 
             throw new UnknownExpressionException();
+        }
+
+        private QueryTree.ProjectionAliasesExpression ParseNewExpression(NewExpression expression)
+        {
+            var index = 0;
+            var aliasIndex = 0;
+            var arguments = expression.Arguments.Select(x => new QueryTree.ProjectionConstructorArgumentExpression
+            {
+                Index = index++,
+                Expression = new QueryTree.AliasedExpression { Expression = ParseExpression(x), Alias = "proj_" + aliasIndex++ }
+            }).ToList();
+
+            return new QueryTree.ProjectionAliasesExpression
+            {
+                Constructor = expression.Constructor,
+                ConstructorArguments = arguments,
+                MemberAssignments = new List<QueryTree.ProjectionMemberAssignmentExpression>()
+            };
+        }
+
+        private QueryTree.ProjectionAliasesExpression ParseMemberInitExpression(MemberInitExpression expression)
+        {
+            var index = 0;
+            var aliasIndex = 0;
+            var arguments = expression.NewExpression.Arguments.Select(x=> new QueryTree.ProjectionConstructorArgumentExpression
+            {
+                Index = index++,
+                Expression = new QueryTree.AliasedExpression { Expression = ParseExpression(x), Alias = "proj_" + aliasIndex++}
+            }).ToList();
+            var bindings = expression.Bindings.Cast<MemberAssignment>().Select(x => 
+                new QueryTree.ProjectionMemberAssignmentExpression
+                {
+                    Member = x.Member, Expression = new QueryTree.AliasedExpression {Expression = ParseExpression(x.Expression), Alias = "proj_" + aliasIndex++ }
+                }).ToList();
+
+            return new QueryTree.ProjectionAliasesExpression
+            {
+                Constructor = expression.NewExpression.Constructor,
+                ConstructorArguments = arguments,
+                MemberAssignments = bindings
+            };
         }
 
         private QueryTree.ConstantExpression ParseConstantExpression(ConstantExpression expression)
@@ -154,7 +214,7 @@ namespace Mascis.Query
 
         private object GetValueFromExpression(Expression expression)
         {
-            var objectMember = Expression.Convert(expression, typeof(object));
+            var objectMember = Expression.Convert(expression, typeof (object));
             var getterLambda = Expression.Lambda<Func<object>>(objectMember);
             var getter = getterLambda.Compile();
             return getter();
@@ -166,7 +226,7 @@ namespace Mascis.Query
             var property = (PropertyInfo) expression.Member;
             var propertyMap = entityMapping.InterceptPropertyDictionary[property];
 
-            var fex = (Expression)expression;
+            var fex = (Expression) expression;
             var refType = typeof (IQueryTableReference);
 
             while (true)
@@ -188,11 +248,11 @@ namespace Mascis.Query
                     return ParseConstantExpression(GetValueFromExpression(expression));
                 }
 
-                fex = ((MemberExpression)fex).Expression;
+                fex = ((MemberExpression) fex).Expression;
             }
         }
 
-        private Type GetTypeFromExpression(Expression expression)
+        private static Type GetTypeFromExpression(Expression expression)
         {
             if (expression is MemberExpression)
             {

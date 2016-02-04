@@ -26,13 +26,13 @@ namespace Mascis.Query
     {
         private int _fieldCounter;
 
-        public QueryTable(string alias, EntityMapping mapping, MascisSession session)
+        public QueryTable(string alias, EntityMapping mapping, IMascisSession session)
         {
             Alias = alias;
             Mapping = mapping;
             _fieldCounter = 0;
-            
-            Ex = (TEntity)session.Factory.Generator.CreateClassProxy(typeof(TEntity), new[] { typeof(IQueryTableReference)}, new QueryTableReferenceInterceptor(this));
+
+            Ex = (TEntity) session.Factory.Generator.CreateClassProxy(typeof (TEntity), new[] {typeof (IQueryTableReference)}, new QueryTableReferenceInterceptor(this));
         }
 
         public TEntity Ex { get; }
@@ -69,14 +69,14 @@ namespace Mascis.Query
         {
             private readonly ConstantExpression _expression;
 
-            internal Expression<TOutput> VisitAndConvert<T>(Expression<T> root)
-            {
-                return (Expression<TOutput>)VisitLambda(root);
-            }
-
             public ParameterToConstantExpressionVisitor(ConstantExpression expression)
             {
                 _expression = expression;
+            }
+
+            internal Expression<TOutput> VisitAndConvert<T>(Expression<T> root)
+            {
+                return (Expression<TOutput>) VisitLambda(root);
             }
 
             protected override Expression VisitParameter(ParameterExpression node)

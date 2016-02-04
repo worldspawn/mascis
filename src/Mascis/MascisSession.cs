@@ -2,15 +2,33 @@ using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Data.SqlClient;
+using System.Linq;
+using System.Linq.Expressions;
+using System.Reflection;
 using Mascis.Configuration;
 using Mascis.Query;
 
 namespace Mascis
 {
-    public class MascisSession: IDisposable
+    public interface IMascisSession
     {
-        //private readonly ProxyGenerator _generator;
-        //private readonly FooInterceptor _interceptor;
+        MascisFactory Factory { get; }
+        QueryParser Parser { get; }
+        IDbConnection DbConnection { get; }
+        void Dispose();
+        void Attach(object obj);
+
+        T Create<T>()
+            where T : class;
+
+        void Save(object obj);
+        void SaveChanges();
+        IList<TEntity> Execute<TEntity>(Query<TEntity> query);
+        Query<TEntity> Query<TEntity>();
+    }
+
+    public class MascisSession : IDisposable, IMascisSession
+    {
         private readonly Dictionary<object, object[]> _attachedObjects;
 
         public MascisSession(MascisFactory factory)
@@ -26,6 +44,14 @@ namespace Mascis
         public QueryParser Parser { get; }
 
         public IDbConnection DbConnection { get; } //TODO:
+
+        public void Dispose()
+        {
+            if (DbConnection != null && DbConnection.State == ConnectionState.Open)
+            {
+                DbConnection.Close();
+            }
+        }
 
         private void Attach<T>(T entity, object[] state)
         {
@@ -99,6 +125,46 @@ namespace Mascis
             }
         }
 
+        public IList<T> Execute<T, TEntity>(Projection<T, TEntity> projection)
+        {
+            var queryPlan = Parser.Parse(projection);
+            var expression = queryPlan.Expression;
+            if (expression == null) throw new NullReferenceException(nameof(expression));
+            var processor = new MsSqlProcessor();
+            var list = new List<T>();
+            var cstr = queryPlan.Constructor.Constructor;
+
+            using (var command = processor.Process(queryPlan.Expression, queryPlan.Parameters, this))
+            {
+                command.Connection = DbConnection;
+                if (DbConnection.State != ConnectionState.Open)
+                {
+                    command.Connection.Open();
+                }
+                using (var reader = command.ExecuteReader())
+                {
+                    while (reader.Read())
+                    {
+                        var args = queryPlan.Constructor.ConstructorArguments.Select(prop =>
+                        {
+                            var ordinal = reader.GetOrdinal(prop.Expression.Alias);
+                            return reader.GetValue(ordinal);
+                        }).ToArray();
+                        var t = (T)cstr.Invoke(args);
+                        foreach (var prop in queryPlan.Constructor.MemberAssignments)
+                        {
+                            var ordinal = reader.GetOrdinal(prop.Expression.Alias);
+                            var value = reader.GetValue(ordinal);
+                            ((PropertyInfo)prop.Member).SetValue(t, value);
+                        }
+                        list.Add(t);
+                    }
+                }
+            }
+
+            return list;
+        } 
+
         public IList<TEntity> Execute<TEntity>(Query<TEntity> query)
         {
             var queryPlan = Parser.Parse(query);
@@ -106,7 +172,7 @@ namespace Mascis
             if (expression == null) throw new NullReferenceException(nameof(expression));
             var processor = new MsSqlProcessor();
             var list = new List<TEntity>();
-            var cstr = typeof(TEntity).GetConstructor(new Type[0]);
+            var cstr = typeof (TEntity).GetConstructor(new Type[0]);
             if (cstr == null)
             {
                 throw new NoDefaultConstructorException();
@@ -190,13 +256,9 @@ namespace Mascis
         {
             return Mascis.Query.Query<TEntity>.From(this);
         }
+    }
 
-        public void Dispose()
-        {
-            if (DbConnection != null && DbConnection.State == ConnectionState.Open)
-            {
-                DbConnection.Close();
-            }
-        }
+    public class TargetNotWriteableException : Exception
+    {
     }
 }

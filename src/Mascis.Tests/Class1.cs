@@ -4,6 +4,11 @@ using Mascis.Query;
 
 namespace Mascis.Tests
 {
+
+    public class Zap
+    {
+        public string Foo { get; set; }
+    }
     public class Class1
     {
         public Class1()
@@ -28,10 +33,16 @@ namespace Mascis.Tests
 
             var p = q.Project(() => new
             {
-                Test = f.Name
+                Test = f.Name + "ggg"
+            });
+
+            var p2 = q.Project(() => new Zap
+            {
+                Foo = f.Name + "ggg"
             });
 
             var xx = mascisSession.Execute(p);
+            var xxx = mascisSession.Execute(p2);
 
             var list = q.Execute();
             list[0].Name = "Zong";

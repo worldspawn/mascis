@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Linq.Expressions;
 using Mascis.Configuration;
 
@@ -58,6 +59,16 @@ namespace Mascis.Query
             return this;
         }
 
+        public QueryTable<TEntity> Join<T>(QueryTable<T> queryTable, Expression<Func<TEntity, T, bool>> on)
+        {
+            var sourceConstant = Expression.Constant(Ex);
+            var targetConstant = Expression.Constant(queryTable.Ex);
+            var ev = new ParameterToConstantExpressionVisitor<Func<bool>>(sourceConstant, targetConstant);
+            var convertedOn = ev.VisitAndConvert(on);
+            Joins.Add(new QueryJoin(convertedOn, queryTable));
+            return this;
+        }
+
         public QueryMap Map(Expression<Func<object>> expression)
         {
             var qm = new QueryMap(expression, "f" + _fieldCounter++, this);
@@ -67,9 +78,9 @@ namespace Mascis.Query
 
         public class ParameterToConstantExpressionVisitor<TOutput> : ExpressionVisitor
         {
-            private readonly ConstantExpression _expression;
+            private readonly ConstantExpression[] _expression;
 
-            public ParameterToConstantExpressionVisitor(ConstantExpression expression)
+            public ParameterToConstantExpressionVisitor(params ConstantExpression[] expression)
             {
                 _expression = expression;
             }
@@ -81,7 +92,8 @@ namespace Mascis.Query
 
             protected override Expression VisitParameter(ParameterExpression node)
             {
-                return _expression;
+                var constant = _expression.First(x => x.Type.BaseType == node.Type);//base type because these are always proxies
+                return constant;
             }
 
             protected override Expression VisitLambda<T>(Expression<T> node)

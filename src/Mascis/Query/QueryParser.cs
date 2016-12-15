@@ -103,8 +103,9 @@ namespace Mascis.Query
 
         public ParsedProjection Parse<T, TEntity>(Projection<T, TEntity> projection)
         {
-            var select = Parse(projection.Query.FromTable, true);
-            var values = _binaryParser.Parse(projection.Expression) as QueryTree.ProjectionAliasesExpression;
+            var context = new ParseContext();
+            var select = Parse(projection.Query.FromTable, context);
+            var values = _binaryParser.Parse(projection.Expression, context) as QueryTree.ProjectionAliasesExpression;
             if (values == null) throw new ArgumentNullException(nameof(values));
             select.Values.Clear();
             select.Values = values.ConstructorArguments.Select(x => new QueryTree.AliasedExpression
@@ -119,7 +120,7 @@ namespace Mascis.Query
             }))
             .ToList();
             
-            var parameters = _binaryParser.GetConstantExpressionsAndClear();
+            var parameters = context.ConstantExpressions.ToArray();
             var parameterCount = 0;
             Array.ForEach(parameters, x => x.ParameterName = "p" + parameterCount++);
 
@@ -127,22 +128,22 @@ namespace Mascis.Query
             {
                 Constructor = values,
                 Expression = select,
-                Parameters = parameters
+                Parameters = parameters,
             };
         }
 
-        public QueryTree.SelectExpression Parse(QueryTable queryTable, bool isSubQuery = false)
+        public QueryTree.SelectExpression Parse(QueryTable queryTable, ParseContext context, bool isSubQuery = false)
         {
             var ex = new QueryTree.SelectExpression
             {
                 Values = queryTable.Maps.Select(x => new QueryTree.AliasedExpression
                 {
                     Alias = x.Alias,
-                    Expression = _binaryParser.Parse(x.Expression)
+                    Expression = _binaryParser.Parse(x.Expression, context)
                 }).ToList()
             };
 
-            if (!isSubQuery && ex.Values.Count == 0)
+            if (!isSubQuery && ex.Values.Count == 0 && queryTable.GroupBys.Count == 0)
             {
                 ex.Values = queryTable.Mapping.Maps.Select(x => new QueryTree.AliasedExpression
                 {
@@ -153,6 +154,15 @@ namespace Mascis.Query
                         TableAlias = queryTable.Alias
                     },
                     MapMapping = x
+                }).ToList();
+            }
+
+            if (!isSubQuery && ex.Values.Count == 0 && queryTable.GroupBys.Count > 0)
+            {
+                ex.Values = queryTable.GroupBys.Select(x => new QueryTree.AliasedExpression
+                {
+                    Alias = x.Alias,
+                    Expression = _binaryParser.Parse(x.Expression, context)
                 }).ToList();
             }
 
@@ -167,13 +177,13 @@ namespace Mascis.Query
 
             foreach (var j in queryTable.Joins)
             {
-                if (j.QueryTable.Maps.Count > 0 || j.QueryTable.Joins.Count > 0)
+                if (j.QueryTable.Maps.Count > 0 || j.QueryTable.Joins.Count > 0 || j.QueryTable.GroupBys.Count > 0)
                 {
                     ex.Join.Add(new QueryTree.JoinExpression
                     {
                         Alias = new QueryTree.TableAliasExpression {Alias = j.QueryTable.Alias},
-                        On = _binaryParser.Parse(j.On),
-                        Table = Parse(j.QueryTable)
+                        On = _binaryParser.Parse(j.On, context),
+                        Table = Parse(j.QueryTable, context)
                     });
                 }
                 else
@@ -181,7 +191,7 @@ namespace Mascis.Query
                     ex.Join.Add(new QueryTree.JoinExpression
                     {
                         Alias = new QueryTree.TableAliasExpression {Alias = j.QueryTable.Alias},
-                        On = _binaryParser.Parse(j.On),
+                        On = _binaryParser.Parse(j.On, context),
                         Table = new QueryTree.TableExpression
                         {
                             TableAlias = j.QueryTable.Alias,
@@ -189,12 +199,16 @@ namespace Mascis.Query
                         }
                     });
                 }
+            }
 
+            foreach (var w in queryTable.Wheres)
+            {
+                ex.Where.Add(_binaryParser.Parse(w.Where, context));
+            }
 
-                foreach (var w in queryTable.Wheres)
-                {
-                    ex.Where.Add(_binaryParser.Parse(w.Where));
-                }
+            foreach (var w in queryTable.GroupBys)
+            {
+                ex.GroupBy.Add(_binaryParser.Parse(w.Expression, context));
             }
 
             return ex;
@@ -202,9 +216,10 @@ namespace Mascis.Query
 
         public ParsedQuery Parse<TEntity>(Query<TEntity> query)
         {
-            var ex = Parse(query.FromTable);
-            var parameters = _binaryParser.GetConstantExpressionsAndClear();
+            var context = new ParseContext();
+            var ex = Parse(query.FromTable, context);
             var parameterCount = 0;
+            var parameters = context.ConstantExpressions.ToArray();
             Array.ForEach(parameters, x => x.ParameterName = "p" + parameterCount++);
 
             return new ParsedQuery

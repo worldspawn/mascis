@@ -28,21 +28,19 @@ namespace Mascis.Tests
             var q = mascisSession.Query<Order>();
             var f = q.FromTable.Ex;
             //var q1 = q.CreateTable<OrderItem>((oi) => f.Id == oi.OrderId);
-            var q1 = q.CreateTable<OrderItem>(oi => o.Id == oi.OrderId || f.Id == oi.OrderId);
+            var q1 = q.CreateTable<OrderItem>();
+            
             //q.FromTable.Join(q1, () => q.FromTable.Ex.Id == q1.Ex.OrderId);
+            var gRef = q1.GroupBy(() => q1.Ex.Amount);
+
+            q.Join(q1, () => gRef.Value > 10);
 
             var p = q.Project(() => new
             {
-                Test = f.Name + "ggg"
-            });
-
-            var p2 = q.Project(() => new Zap
-            {
-                Foo = f.Name + "ggg"
+                Test = gRef.Value
             });
 
             var xx = mascisSession.Execute(p);
-            var xxx = mascisSession.Execute(p2);
 
             var list = q.Execute();
             list[0].Name = "Zong";

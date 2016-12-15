@@ -13,6 +13,7 @@ namespace Mascis.Query
             Maps = new List<QueryMap>();
             Joins = new List<QueryJoin>();
             Wheres = new List<WhereClause>();
+            GroupBys = new List<QueryMap>();
         }
 
         public string Alias { get; set; }
@@ -21,6 +22,7 @@ namespace Mascis.Query
         public List<QueryMap> Maps { get; }
         public List<QueryJoin> Joins { get; }
         public List<WhereClause> Wheres { get; }
+        public List<QueryMap> GroupBys { get; } 
     }
 
     public class QueryTable<TEntity> : QueryTable
@@ -67,6 +69,20 @@ namespace Mascis.Query
             var convertedOn = ev.VisitAndConvert(on);
             Joins.Add(new QueryJoin(convertedOn, queryTable));
             return this;
+        }
+
+        public QueryTable<TEntity> GroupBy(params Expression<Func<object>>[] groupBy)
+        {
+            GroupBys.AddRange(groupBy.Select(x => new QueryMap(x, "f" + _fieldCounter++, this)));
+            return this;
+        }
+
+        public QueryMap<T> GroupBy<T>(Expression<Func<T>> groupBy)
+        {
+            var map = new QueryMap<T>(groupBy, $"f{_fieldCounter++}", this);
+            GroupBys.Add(map);
+
+            return map;
         }
 
         public QueryMap Map(Expression<Func<object>> expression)

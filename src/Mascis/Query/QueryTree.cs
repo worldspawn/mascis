@@ -34,6 +34,7 @@ namespace Mascis.Query
             public IList<AliasedExpression> Values { get; set; }
             public IList<JoinExpression> Join { get; } = new List<JoinExpression>();
             public IList<Expression> Where { get; } = new List<Expression>();
+            public IList<Expression> GroupBy { get; } = new List<Expression>();
         }
 
         public class ProjectionAliasesExpression : Expression
@@ -41,6 +42,7 @@ namespace Mascis.Query
             public IList<ProjectionConstructorArgumentExpression> ConstructorArguments { get; set; }
             public IList<ProjectionMemberAssignmentExpression> MemberAssignments { get; set; }
             public ConstructorInfo Constructor { get; set; }
+            public IList<Expression> GroupBy { get; } = new List<Expression>();
         }
 
         public class ProjectionConstructorArgumentExpression : Expression

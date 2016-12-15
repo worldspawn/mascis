@@ -1,5 +1,6 @@
 using System;
 using System.Linq.Expressions;
+using Castle.DynamicProxy.Generators.Emitters.SimpleAST;
 
 namespace Mascis.Query
 {
@@ -8,7 +9,6 @@ namespace Mascis.Query
         public QueryMap(Expression<Func<object>> expression, string alias, QueryTable queryTable)
         {
             Table = queryTable;
-            if (alias == null) throw new ArgumentNullException(nameof(alias));
             Expression = expression;
             Alias = alias;
         }
@@ -20,6 +20,28 @@ namespace Mascis.Query
         public T Value<T>()
         {
             throw new NotImplementedException();
+        }
+    }
+
+    public class QueryMap<T> : QueryMap
+    {
+        public QueryMap(Expression<Func<T>> expression, string alias, QueryTable queryTable)
+            :base (ConvertExpression(expression), alias, queryTable)
+        {
+        }
+
+        public T Value()
+        {
+            throw new NotImplementedException();
+        }
+
+        private static Expression<Func<object>>  ConvertExpression(Expression<Func<T>> expression)
+        {
+            //var newParameter = System.Linq.Expressions.Expression.Parameter(typeof (object));
+            //var oldParameter = expression.Parameters[0];
+
+
+            return System.Linq.Expressions.Expression.Lambda<Func<object>>(System.Linq.Expressions.Expression.Convert(expression.Body, typeof(object)));
         }
     }
 }

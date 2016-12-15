@@ -6,17 +6,27 @@ using System.Reflection;
 
 namespace Mascis.Query
 {
+    public class ParseContext
+    {
+        public List<QueryTree.ConstantExpression> ConstantExpressions { get; } =
+            new List<QueryTree.ConstantExpression>();
+
+    }
+
     public class ExpressionParser
     {
         private readonly List<QueryTree.ConstantExpression> _constantExpressions =
             new List<QueryTree.ConstantExpression>();
 
-        private readonly MethodInfo _mapValue = typeof (QueryMap).GetMethod("Value",
+        private static readonly MethodInfo MapValue = typeof (QueryMap).GetMethod("Value",
+            BindingFlags.Instance | BindingFlags.Public);
+
+        private static readonly MethodInfo MapValueNotGeneric = typeof(QueryMap<>).GetMethod("Value",
             BindingFlags.Instance | BindingFlags.Public);
 
         private readonly IMascisSession _session;
 
-        private readonly MethodInfo _stringContains = typeof (string).GetMethod("Contains",
+        private static readonly MethodInfo StringContains = typeof (string).GetMethod("Contains",
             BindingFlags.Instance | BindingFlags.Public);
 
         public ExpressionParser(IMascisSession session)
@@ -24,9 +34,9 @@ namespace Mascis.Query
             _session = session;
         }
 
-        public QueryTree.Expression Parse<T>(Expression<Func<T>> expression)
+        public QueryTree.Expression Parse<T>(Expression<Func<T>> expression, ParseContext context)
         {
-            return ParseExpression(expression.Body);
+            return ParseExpression(expression.Body, context);
         }
 
         //public QueryTree.Expression Parse(Expression<Func<object>> expression)
@@ -34,11 +44,12 @@ namespace Mascis.Query
         //    return ParseExpression(expression.Body);
         //}
 
-        public QueryTree.Expression Parse(Expression<Func<bool>> expression)
+        public QueryTree.Expression Parse(Expression<Func<bool>> expression, ParseContext context)
         {
-            return ParseExpression(expression.Body);
+            return ParseExpression(expression.Body, context);
         }
 
+        [Obsolete]
         public QueryTree.ConstantExpression[] GetConstantExpressionsAndClear()
         {
             try
@@ -51,12 +62,12 @@ namespace Mascis.Query
             }
         }
 
-        private QueryTree.Expression ParseMethodCallExpression(MethodCallExpression expression)
+        private QueryTree.Expression ParseMethodCallExpression(MethodCallExpression expression, ParseContext context)
         {
-            if (expression.Method == _stringContains)
+            if (expression.Method == StringContains)
             {
-                var searchFor = ParseExpression(expression.Arguments[0]);
-                var source = ParseExpression(expression.Object);
+                var searchFor = ParseExpression(expression.Arguments[0], context);
+                var source = ParseExpression(expression.Object, context);
 
                 return new QueryTree.FunctionExpression
                 {
@@ -69,9 +80,10 @@ namespace Mascis.Query
                 };
             }
 
-            if (expression.Method.IsGenericMethod && expression.Method.GetGenericMethodDefinition() == _mapValue)
+            if (expression.Method.IsGenericMethod && expression.Method.GetGenericMethodDefinition() == MapValue ||
+                expression.Method.DeclaringType.Module.ResolveMethod(expression.Method.MetadataToken) == MapValueNotGeneric)
             {
-                var map = ParseExpression(expression.Object) as QueryTree.ConstantExpression;
+                var map = ParseExpression(expression.Object, context) as QueryTree.ConstantExpression;
                 var value = map.Value as QueryMap;
 
                 return new QueryTree.AliasReferenceExpression
@@ -84,12 +96,12 @@ namespace Mascis.Query
             throw new UnknownFunctionException();
         }
 
-        private QueryTree.Expression ParseExpression(Expression expression)
+        private QueryTree.Expression ParseExpression(Expression expression, ParseContext context)
         {
             var binaryExpression = expression as BinaryExpression;
             if (binaryExpression != null)
             {
-                var ex = ParseBinaryExpression(binaryExpression);
+                var ex = ParseBinaryExpression(binaryExpression, context);
                 return ex;
             }
 
@@ -98,12 +110,12 @@ namespace Mascis.Query
             {
                 if (memberExpression.Member is FieldInfo)
                 {
-                    var ex = ParseFieldExpression(memberExpression);
+                    var ex = ParseFieldExpression(memberExpression, context);
                     return ex;
                 }
                 if (memberExpression.Member is PropertyInfo)
                 {
-                    var ex = ParseMemberExpression(memberExpression);
+                    var ex = ParseMemberExpression(memberExpression, context);
                     return ex;
                 }
             }
@@ -111,42 +123,54 @@ namespace Mascis.Query
             var constantExpression = expression as ConstantExpression;
             if (constantExpression != null)
             {
-                var ex = ParseConstantExpression(constantExpression);
+                var ex = ParseConstantExpression(constantExpression, context);
+                return ex;
+            }
+
+            var unaryExpression = expression as UnaryExpression;
+            if (unaryExpression != null)
+            {
+                var ex = ParseUnaryExpression(unaryExpression, context);
                 return ex;
             }
 
             var methodExpression = expression as MethodCallExpression;
             if (methodExpression != null)
             {
-                var ex = ParseMethodCallExpression(methodExpression);
+                var ex = ParseMethodCallExpression(methodExpression, context);
                 return ex;
             }
 
             var memberInitExpression = expression as MemberInitExpression;
             if (memberInitExpression != null)
             {
-                var ex = ParseMemberInitExpression(memberInitExpression);
+                var ex = ParseMemberInitExpression(memberInitExpression, context);
                 return ex;
             }
 
             var newExpression = expression as NewExpression;
             if (newExpression != null)
             {
-                var ex = ParseNewExpression(newExpression);
+                var ex = ParseNewExpression(newExpression, context);
                 return ex;
             }
 
             throw new UnknownExpressionException();
         }
 
-        private QueryTree.ProjectionAliasesExpression ParseNewExpression(NewExpression expression)
+        private QueryTree.Expression ParseUnaryExpression(UnaryExpression unaryExpression, ParseContext context)
+        {
+            return ParseExpression(unaryExpression.Operand, context);
+        }
+
+        private QueryTree.ProjectionAliasesExpression ParseNewExpression(NewExpression expression, ParseContext context)
         {
             var index = 0;
             var aliasIndex = 0;
             var arguments = expression.Arguments.Select(x => new QueryTree.ProjectionConstructorArgumentExpression
             {
                 Index = index++,
-                Expression = new QueryTree.AliasedExpression { Expression = ParseExpression(x), Alias = "proj_" + aliasIndex++ }
+                Expression = new QueryTree.AliasedExpression { Expression = ParseExpression(x, context), Alias = "proj_" + aliasIndex++ }
             }).ToList();
 
             return new QueryTree.ProjectionAliasesExpression
@@ -157,19 +181,19 @@ namespace Mascis.Query
             };
         }
 
-        private QueryTree.ProjectionAliasesExpression ParseMemberInitExpression(MemberInitExpression expression)
+        private QueryTree.ProjectionAliasesExpression ParseMemberInitExpression(MemberInitExpression expression, ParseContext context)
         {
             var index = 0;
             var aliasIndex = 0;
             var arguments = expression.NewExpression.Arguments.Select(x=> new QueryTree.ProjectionConstructorArgumentExpression
             {
                 Index = index++,
-                Expression = new QueryTree.AliasedExpression { Expression = ParseExpression(x), Alias = "proj_" + aliasIndex++}
+                Expression = new QueryTree.AliasedExpression { Expression = ParseExpression(x, context), Alias = "proj_" + aliasIndex++}
             }).ToList();
             var bindings = expression.Bindings.Cast<MemberAssignment>().Select(x => 
                 new QueryTree.ProjectionMemberAssignmentExpression
                 {
-                    Member = x.Member, Expression = new QueryTree.AliasedExpression {Expression = ParseExpression(x.Expression), Alias = "proj_" + aliasIndex++ }
+                    Member = x.Member, Expression = new QueryTree.AliasedExpression {Expression = ParseExpression(x.Expression, context), Alias = "proj_" + aliasIndex++ }
                 }).ToList();
 
             return new QueryTree.ProjectionAliasesExpression
@@ -180,24 +204,27 @@ namespace Mascis.Query
             };
         }
 
-        private QueryTree.ConstantExpression ParseConstantExpression(ConstantExpression expression)
+        private QueryTree.ConstantExpression ParseConstantExpression(ConstantExpression expression, ParseContext context)
         {
-            return ParseConstantExpression(expression.Value);
+            return ParseConstantExpression(expression.Value, context);
         }
 
-        private QueryTree.ConstantExpression ParseConstantExpression(object value)
+        private QueryTree.ConstantExpression ParseConstantExpression(object value, ParseContext context)
         {
             var ex = new QueryTree.ConstantExpression
             {
                 Value = value
             };
 
-            _constantExpressions.Add(ex);
+            if (!(ex.Value is QueryMap))
+            {
+                context.ConstantExpressions.Add(ex);
+            }
 
             return ex;
         }
 
-        private QueryTree.ConstantExpression ParseFieldExpression(MemberExpression expression)
+        private QueryTree.ConstantExpression ParseFieldExpression(MemberExpression expression, ParseContext context)
         {
             var fieldInfo = expression.Member as FieldInfo;
             var constantExpression = expression.Expression as ConstantExpression;
@@ -207,7 +234,10 @@ namespace Mascis.Query
                 Value = fieldInfo.GetValue(constantExpression.Value)
             };
 
-            _constantExpressions.Add(ex);
+            if (!(ex.Value is QueryMap))
+            {
+                context.ConstantExpressions.Add(ex);
+            }
 
             return ex;
         }
@@ -220,7 +250,7 @@ namespace Mascis.Query
             return getter();
         }
 
-        private QueryTree.Expression ParseColumnExpression(MemberExpression expression)
+        private QueryTree.Expression ParseColumnExpression(MemberExpression expression, ParseContext context)
         {
             var entityMapping = _session.Factory.Mappings.MappingsByType[expression.Member.DeclaringType];
             var property = (PropertyInfo) expression.Member;
@@ -245,7 +275,7 @@ namespace Mascis.Query
                         };
                     }
 
-                    return ParseConstantExpression(GetValueFromExpression(expression));
+                    return ParseConstantExpression(GetValueFromExpression(expression), context);
                 }
 
                 fex = ((MemberExpression) fex).Expression;
@@ -267,7 +297,7 @@ namespace Mascis.Query
             return null;
         }
 
-        private QueryTree.Expression ParseMemberExpression(MemberExpression expression)
+        private QueryTree.Expression ParseMemberExpression(MemberExpression expression, ParseContext context)
         {
             var startedWith = expression;
             while (!_session.Factory.Mappings.MappingsByType.ContainsKey(expression.Member.DeclaringType))
@@ -290,16 +320,16 @@ namespace Mascis.Query
                 }
             }
 
-            return ParseColumnExpression(expression);
+            return ParseColumnExpression(expression, context);
         }
 
-        private QueryTree.BinaryExpression ParseBinaryExpression(BinaryExpression binaryExpression)
+        private QueryTree.BinaryExpression ParseBinaryExpression(BinaryExpression binaryExpression, ParseContext context)
         {
             var ex = new QueryTree.BinaryExpression
             {
-                Left = ParseExpression(binaryExpression.Left),
+                Left = ParseExpression(binaryExpression.Left, context),
                 Operator = MapNodeType(binaryExpression.NodeType),
-                Right = ParseExpression(binaryExpression.Right)
+                Right = ParseExpression(binaryExpression.Right, context)
             };
 
             return ex;

@@ -46,6 +46,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="NoDefaultConstructorException.cs" />
+    <Compile Include="Query\ExpressionExtensions.cs" />
     <Compile Include="Query\ExpressionParser.cs" />
     <Compile Include="Configuration\DefaultMappingConfiguration.cs" />
     <Compile Include="Configuration\EntityMapping.cs" />

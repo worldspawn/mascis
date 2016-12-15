@@ -55,7 +55,7 @@ namespace Mascis
             {
                 command.Parameters.Add(new SqlParameter
                 {
-                    Value = parameter.Value,
+                    Value = parameter.Value ?? DBNull.Value,
                     ParameterName = parameter.ParameterName
                 });
             }
@@ -106,10 +106,12 @@ namespace Mascis
 
             public string ParseExpression(QueryTree.JoinExpression expression)
             {
-                var includeAlias = expression.Table is QueryTree.SelectExpression;
-                var alias = includeAlias ? _parser.ParseExpression(expression.Alias) : null;
+                var wrapJoin = expression.Table is QueryTree.SelectExpression;
+                var wrapStart = wrapJoin ? "(" : null;
+                var wrapEnd = wrapJoin ? ")" : null;
+                var alias = _parser.ParseExpression(expression.Alias);
                 return
-                    $"JOIN {_parser.ParseExpression(expression.Table)} {alias} ON {_parser.ParseExpression(expression.On)} ";
+                    $"JOIN {wrapStart}{_parser.ParseExpression(expression.Table)}{wrapEnd} {alias} ON {_parser.ParseExpression(expression.On)}";
             }
         }
 
@@ -375,6 +377,16 @@ namespace Mascis
                         {
                             qb.Append(_parser.ParseExpression(where));
                             qb.Append(expression.Where.IndexOf(@where) + 1 < expression.Where.Count ? " AND " : " ");
+                        }
+                    }
+
+                    if (expression.GroupBy.Any())
+                    {
+                        qb.Append("GROUP BY ");
+                        foreach (var gby in expression.GroupBy)
+                        {
+                            qb.Append(_parser.ParseExpression(gby));
+                            qb.Append(expression.GroupBy.IndexOf(gby) + 1 < expression.GroupBy.Count ? ", " : " ");
                         }
                     }
                 }
